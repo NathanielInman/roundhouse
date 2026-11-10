@@ -1,34 +1,75 @@
 //! Temperatures from `/sys/class/hwmon`: the CPU package, each NVMe or SATA
 //! drive (matched to its block device) and each AMD GPU (matched to its PCI
-//! device, for the GPU collector).
+//! device, for the GPU collector). Each reading carries the limit the
+//! hardware reports for itself, when it reports one.
 
 use super::{read, read_trim};
 use std::path::{Path, PathBuf};
 
+/// One sensor: its temperature and the point where the part protects itself
+/// (throttles), both in °C.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Reading {
+    pub temp: f32,
+    pub limit: Option<f32>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Temps {
-    pub cpu: Option<f32>,
-    /// Block device name (`nvme0n1`, `sda`) and its temperature.
-    pub drives: Vec<(String, f32)>,
-    /// Resolved PCI device path and its temperature (amdgpu "edge").
-    pub pci: Vec<(PathBuf, f32)>,
+    pub cpu: Option<Reading>,
+    /// Block device name (`nvme0n1`, `sda`) and its reading.
+    pub drives: Vec<(String, Reading)>,
+    /// Resolved PCI device path and its reading (amdgpu "edge").
+    pub pci: Vec<(PathBuf, Reading)>,
 }
 
 fn millideg(path: &Path) -> Option<f32> {
     read_trim(path)?.parse::<f32>().ok().map(|v| v / 1000.0)
 }
 
-/// The `tempN_input` whose `tempN_label` is one of `labels`, else `temp1`.
-fn labelled(dir: &Path, labels: &[&str]) -> Option<f32> {
-    for n in 1..=16 {
-        let Some(label) = read_trim(dir.join(format!("temp{n}_label"))) else {
-            continue;
-        };
-        if labels.iter().any(|l| label.eq_ignore_ascii_case(l)) {
-            return millideg(&dir.join(format!("temp{n}_input")));
-        }
+/// The `N` of the `tempN_input` whose `tempN_label` is one of `labels`, else
+/// 1.
+fn sensor(dir: &Path, labels: &[&str]) -> usize {
+    (1..=16)
+        .find(|n| {
+            read_trim(dir.join(format!("temp{n}_label")))
+                .is_some_and(|l| labels.iter().any(|x| l.eq_ignore_ascii_case(x)))
+        })
+        .unwrap_or(1)
+}
+
+/// Drives report 65261.85°C for "no limit" on their extra sensors, and some
+/// chips report 0; anything outside this range is not a real limit.
+fn plausible(limit: f32) -> bool {
+    (40.0..=150.0).contains(&limit)
+}
+
+/// Sensor `n` of `dir`, with its limit taken from the first of `limits`
+/// (`max`, `crit`) that holds a believable value.
+fn reading(dir: &Path, labels: &[&str], limits: &[&str]) -> Option<Reading> {
+    let n = sensor(dir, labels);
+    let temp = millideg(&dir.join(format!("temp{n}_input")))?;
+    let limit = limits
+        .iter()
+        .filter_map(|l| millideg(&dir.join(format!("temp{n}_{l}"))))
+        .find(|v| plausible(*v));
+    Some(Reading { temp, limit })
+}
+
+/// TjMax for AMD CPUs whose limit is not the usual 95°C. `k10temp` does not
+/// report one, so it comes from AMD's spec sheets by model.
+pub fn amd_tjmax(model: &str) -> Option<f32> {
+    let words: Vec<&str> = model.split_whitespace().collect();
+    let has = |names: &[&str]| words.iter().any(|w| names.contains(w));
+    if has(&["7800X3D", "7900X3D", "7950X3D"]) {
+        Some(89.0)
+    } else if has(&[
+        "5800X3D", "5700X3D", "5600X3D", "5950X", "5900X", "5800X", "5700X",
+    ]) {
+        Some(90.0)
+    } else {
+        None
     }
-    millideg(&dir.join("temp1_input"))
 }
 
 /// Block devices under a device directory: NVMe namespaces next to the
@@ -75,29 +116,33 @@ pub fn read_from(root: &Path) -> Temps {
         match name.as_str() {
             "k10temp" | "zenpower" => {
                 if t.cpu.is_none() {
-                    t.cpu = labelled(&dir, &["Tctl", "Tdie"]);
+                    t.cpu = reading(&dir, &["Tctl", "Tdie"], &[]);
                 }
             }
             "coretemp" => {
+                // `crit` is TjMax; `max` is where Core 2 turned the fans up.
                 if t.cpu.is_none() {
-                    t.cpu = labelled(&dir, &["Package id 0"]);
+                    t.cpu = reading(&dir, &["Package id 0"], &["crit"]);
                 }
             }
             "cpu_thermal" => {
                 if t.cpu.is_none() {
-                    t.cpu = millideg(&dir.join("temp1_input"));
+                    t.cpu = reading(&dir, &[], &["crit"]);
                 }
             }
             "nvme" | "drivetemp" => {
-                if let (Some(dev), Some(temp)) = (dev, labelled(&dir, &["Composite"])) {
+                // NVMe `max` is the drive's warning threshold (WCTEMP), where
+                // it starts to throttle; `crit` (CCTEMP) is past that.
+                if let (Some(dev), Some(r)) = (dev, reading(&dir, &["Composite"], &["max", "crit"]))
+                {
                     for b in block_names(&dev) {
-                        t.drives.push((b, temp));
+                        t.drives.push((b, r));
                     }
                 }
             }
             "amdgpu" => {
-                if let (Some(dev), Some(temp)) = (dev, labelled(&dir, &["edge"])) {
-                    t.pci.push((dev, temp));
+                if let (Some(dev), Some(r)) = (dev, reading(&dir, &["edge"], &["crit"])) {
+                    t.pci.push((dev, r));
                 }
             }
             _ => {}
@@ -111,30 +156,96 @@ pub fn read_from(root: &Path) -> Temps {
 mod tests {
     use super::*;
 
+    fn write(dir: &Path, files: &[(&str, &str)]) {
+        std::fs::create_dir_all(dir).unwrap();
+        for (f, v) in files {
+            std::fs::write(dir.join(f), format!("{v}\n")).unwrap();
+        }
+    }
+
+    // Values from a Ryzen 7 9800X3D desktop with a Sabrent and a Samsung 990
+    // PRO, and from a Core i7 laptop.
     #[test]
     fn reads_a_fake_tree() {
         let root = std::env::temp_dir().join(format!("rh-hwmon-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let hw = root.join("hwmon");
         let devs = root.join("devices");
-        let cpu = hw.join("hwmon4");
-        std::fs::create_dir_all(&cpu).unwrap();
-        std::fs::write(cpu.join("name"), "k10temp\n").unwrap();
-        std::fs::write(cpu.join("temp1_label"), "Tctl\n").unwrap();
-        std::fs::write(cpu.join("temp1_input"), "54250\n").unwrap();
-        let ctrl = devs.join("nvme0");
-        std::fs::create_dir_all(ctrl.join("nvme0n1")).unwrap();
-        let nv = hw.join("hwmon0");
-        std::fs::create_dir_all(&nv).unwrap();
-        std::fs::write(nv.join("name"), "nvme\n").unwrap();
-        std::fs::write(nv.join("temp1_label"), "Composite\n").unwrap();
-        std::fs::write(nv.join("temp1_input"), "43850\n").unwrap();
+        write(
+            &hw.join("hwmon4"),
+            &[
+                ("name", "k10temp"),
+                ("temp1_label", "Tctl"),
+                ("temp1_input", "54250"),
+                ("temp3_label", "Tccd1"),
+                ("temp3_input", "51000"),
+            ],
+        );
+        // The 990 PRO: Composite plus two sensors that report a 65261°C max.
+        write(
+            &hw.join("hwmon1"),
+            &[
+                ("name", "nvme"),
+                ("temp1_label", "Composite"),
+                ("temp1_input", "49850"),
+                ("temp1_max", "81850"),
+                ("temp1_crit", "84850"),
+                ("temp2_label", "Sensor 1"),
+                ("temp2_input", "49850"),
+                ("temp2_max", "65261850"),
+            ],
+        );
+        let ctrl = devs.join("nvme1");
+        std::fs::create_dir_all(ctrl.join("nvme1n1")).unwrap();
         #[cfg(unix)]
-        std::os::unix::fs::symlink(&ctrl, nv.join("device")).unwrap();
+        std::os::unix::fs::symlink(&ctrl, hw.join("hwmon1/device")).unwrap();
         let t = read_from(&hw);
-        assert_eq!(t.cpu, Some(54.25));
+        assert_eq!(
+            t.cpu,
+            Some(Reading {
+                temp: 54.25,
+                limit: None
+            })
+        );
         #[cfg(unix)]
-        assert_eq!(t.drives, vec![("nvme0n1".to_string(), 43.85)]);
+        assert_eq!(
+            t.drives,
+            vec![(
+                "nvme1n1".to_string(),
+                Reading {
+                    temp: 49.85,
+                    limit: Some(81.85)
+                }
+            )]
+        );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn coretemp_uses_tjmax() {
+        let dir = std::env::temp_dir().join(format!("rh-coretemp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write(
+            &dir,
+            &[
+                ("temp1_label", "Package id 0"),
+                ("temp1_input", "45000"),
+                ("temp1_max", "80000"),
+                ("temp1_crit", "100000"),
+                ("temp2_label", "Core 0"),
+                ("temp2_input", "43000"),
+            ],
+        );
+        let r = reading(&dir, &["Package id 0"], &["crit"]).unwrap();
+        assert_eq!((r.temp, r.limit), (45.0, Some(100.0)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn amd_limits() {
+        assert_eq!(amd_tjmax("Ryzen 7 7800X3D"), Some(89.0));
+        assert_eq!(amd_tjmax("Ryzen 9 5950X"), Some(90.0));
+        assert_eq!(amd_tjmax("Ryzen 7 9800X3D"), None);
+        assert_eq!(amd_tjmax("Core i7-12700K"), None);
     }
 }

@@ -33,6 +33,10 @@ Roundhouse replaces.
   temperature by default). It turns amber or red only when something needs
   you: a filesystem filling up, a drive or CPU running hot, memory pressure.
   The tooltip says why.
+- **Temperatures against their limits.** What counts as hot depends on the
+  part, so Roundhouse asks each one: the drive's own warning temperature,
+  the CPU's TjMax, the point where the GPU slows down. Every reading shows
+  next to that limit (`58 / 95°C`).
 - **It opens from the icon you clicked.** The drawer springs out of the bar on
   any edge, on whichever monitor you clicked. The anchoring code is
   Switchyard's.
@@ -140,8 +144,9 @@ hide = ["/boot"]      # mount points to leave out
 [lamp]
 disk_warn = 85        # percent full
 disk_act = 95
-cpu_temp_warn = 85    # °C
-drive_temp_warn = 65
+# Temperatures follow each part's own limit: heads-up 10°C under it, act at
+# it. Set a key only to override that.
+# cpu_temp_act = 90   # °C
 
 [network]
 public_ip = false     # true asks ifconfig.co once a minute while the drawer is open

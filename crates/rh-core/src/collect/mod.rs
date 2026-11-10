@@ -113,10 +113,13 @@ impl Collector {
         let temps = hwmon::scan();
         let (model, threads) = self.cpu_model.clone().unwrap_or_default();
         let cpu = Cpu {
+            temp_limit: temps
+                .cpu
+                .and_then(|r| r.limit.or_else(|| hwmon::amd_tjmax(&model))),
             model,
             threads,
             usage,
-            temp: temps.cpu,
+            temp: temps.cpu.map(|r| r.temp),
             mhz: self.mhz,
             history: self.cpu_hist.iter().copied().collect(),
         };

@@ -70,7 +70,7 @@ at once, so the drawer never opens on old data for long.
 |---|---|---|
 | CPU usage | `/proc/stat` deltas | every sample |
 | CPU model, clock | `/proc/cpuinfo` | first sample, then while open |
-| Temperatures | `/sys/class/hwmon`: `k10temp`/`zenpower` Tctl, `coretemp` package, `nvme`/`drivetemp` Composite mapped to block devices, `amdgpu` edge mapped to PCI devices | every sample |
+| Temperatures | `/sys/class/hwmon`: `k10temp`/`zenpower` Tctl, `coretemp` package, `nvme`/`drivetemp` Composite mapped to block devices, `amdgpu` edge mapped to PCI devices; each with its limit (see the lamp) | every sample |
 | Memory, swap | `/proc/meminfo` | every sample |
 | Pressure | `/proc/pressure/{cpu,memory,io}` | every sample |
 | NVIDIA | NVML, loaded at runtime once | every sample |
@@ -125,13 +125,38 @@ the drawer shows reasons as links to that tab.
 | Rule | Heads-up | Act |
 |---|---|---|
 | Filesystem use | `disk_warn` (85%) | `disk_act` (95%) |
-| Drive temperature | `drive_temp_warn` (65°C) | `drive_temp_act` (75°C) |
-| CPU temperature | `cpu_temp_warn` (85°C) | `cpu_temp_act` (95°C) |
-| GPU temperature | `gpu_temp_warn` (83°C) | `gpu_temp_act` (90°C) |
+| Drive temperature | `drive_temp_warn` (limit - 10°C) | `drive_temp_act` (limit) |
+| CPU temperature | `cpu_temp_warn` (limit - 10°C) | `cpu_temp_act` (limit) |
+| GPU temperature | `gpu_temp_warn` (limit - 10°C) | `gpu_temp_act` (limit) |
 | Memory pressure | PSI `some` avg60 at `mem_pressure_warn` (10) | PSI `full` avg10 at `mem_pressure_act` (10) |
 | Free memory | | under `mem_free_act` (5%) |
 
 Read-only filesystems, stale shares and automount points never count.
+
+### Temperature limits
+
+A safe temperature depends on the part: a Ryzen 9000 boosts until 95°C by
+design, a Samsung 990 PRO warns at 82°C and a Sabrent at 75°C. So each
+sensor's thresholds come from the point where that part protects itself
+(throttles), as the hardware reports it:
+
+| Sensor | Limit |
+|---|---|
+| NVMe | `temp1_max` on the Composite sensor (WCTEMP), else `temp1_crit` |
+| SATA (`drivetemp`) | `temp1_max`, else `temp1_crit` |
+| Intel (`coretemp`) | the package sensor's `crit` (TjMax) |
+| AMD CPU (`k10temp`, which reports none) | AMD's TjMax by model: 89°C for the Ryzen 7000 X3D parts, 90°C for the 5800X3D family and the 5700X to 5950X; otherwise the 95°C fallback |
+| NVIDIA | NVML's slowdown temperature |
+| AMD GPU | the edge sensor's `crit` |
+
+Heads-up is 10°C under the limit and act is the limit. A value outside
+40-150°C is not a limit (drives report 65261°C on their extra sensors). A
+part that reports nothing gets the old fixed thresholds: CPU 85/95, GPU
+83/90, drive 65/75. A `[lamp]` key the user sets wins over all of this.
+
+Every client shows a temperature against its act line ("58 / 95°C"), and a
+lamp reason names the limit ("CPU is at 87°C (limit 95°C)"), so the number
+answers whether it is fine without a lookup.
 
 ## Anchoring
 

@@ -104,6 +104,8 @@ window.roundhouse * { font-family: inherit; }
   font-weight: bold;
   letter-spacing: 1px;
 }
+.t-label.heads-up { color: @rh_heads_up; }
+.t-label.act { color: @rh_act; }
 .t-val { font-size: 20px; font-weight: bold; }
 .t-unit { color: @rh_dim; font-size: 11px; }
 .spark { color: @rh_accent; }

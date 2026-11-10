@@ -8,6 +8,7 @@
 //! - Automount points that have nothing mounted show as "on demand". They are
 //!   never touched, so opening the drawer does not wake a share.
 
+use super::hwmon::Reading;
 use super::{read, read_trim};
 use crate::model::{Disk, DiskKind, Filesystem};
 use std::collections::{BTreeMap, HashMap};
@@ -214,7 +215,7 @@ impl Storage {
         }
     }
 
-    pub fn sample(&mut self, hide: &[String], drive_temps: &[(String, f32)]) -> Vec<Disk> {
+    pub fn sample(&mut self, hide: &[String], drive_temps: &[(String, Reading)]) -> Vec<Disk> {
         let Some(text) = read("/proc/self/mountinfo") else {
             return vec![];
         };
@@ -298,12 +299,13 @@ impl Storage {
             } else {
                 None
             };
-            let temp = drive_temps.iter().find(|(n, _)| *n == key).map(|(_, t)| *t);
+            let reading = drive_temps.iter().find(|(n, _)| *n == key).map(|(_, r)| *r);
             let disk = disks.entry(key.clone()).or_insert_with(|| Disk {
                 name: key.clone(),
                 model,
                 kind,
-                temp,
+                temp: reading.map(|r| r.temp),
+                temp_limit: reading.and_then(|r| r.limit),
                 filesystems: vec![],
             });
             disk.filesystems.push(Filesystem {
@@ -346,6 +348,7 @@ impl Storage {
                 model: None,
                 kind: DiskKind::OnDemand,
                 temp: None,
+                temp_limit: None,
                 filesystems: vec![Filesystem {
                     source: "automount".into(),
                     fstype: "autofs".into(),

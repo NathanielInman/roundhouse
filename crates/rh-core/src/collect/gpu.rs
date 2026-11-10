@@ -14,6 +14,9 @@ pub struct GpuReader {
     nvml: Option<nvml_wrapper::Nvml>,
     nvml_tried: bool,
     names: HashMap<PathBuf, String>,
+    /// NVML slowdown temperature by device index; it never changes.
+    #[cfg(target_os = "linux")]
+    nv_limits: HashMap<u32, Option<f32>>,
     hist: HashMap<String, VecDeque<f32>>,
 }
 
@@ -32,7 +35,7 @@ impl GpuReader {
 
     #[cfg(target_os = "linux")]
     fn nvidia(&mut self) -> Vec<Gpu> {
-        use nvml_wrapper::enum_wrappers::device::TemperatureSensor;
+        use nvml_wrapper::enum_wrappers::device::{TemperatureSensor, TemperatureThreshold};
         if !self.nvml_tried {
             self.nvml_tried = true;
             self.nvml = nvml_wrapper::Nvml::init().ok();
@@ -41,11 +44,18 @@ impl GpuReader {
             return vec![];
         };
         let count = nvml.device_count().unwrap_or(0);
+        let limits = &mut self.nv_limits;
         (0..count)
-            .filter_map(|i| nvml.device_by_index(i).ok())
-            .map(|d| {
+            .filter_map(|i| nvml.device_by_index(i).ok().map(|d| (i, d)))
+            .map(|(i, d)| {
                 let mem = d.memory_info().ok();
+                let temp_limit = *limits.entry(i).or_insert_with(|| {
+                    d.temperature_threshold(TemperatureThreshold::Slowdown)
+                        .ok()
+                        .map(|t| t as f32)
+                });
                 Gpu {
+                    temp_limit,
                     name: d
                         .name()
                         .map(|n| short_gpu(&n))
@@ -101,12 +111,14 @@ impl GpuReader {
                 .entry(real.clone())
                 .or_insert_with(|| amd_name(&dev))
                 .clone();
+            let reading = temps.pci.iter().find(|(p, _)| *p == real).map(|(_, r)| *r);
             let num = |f: &str| read_trim(dev.join(f)).and_then(|v| v.parse::<u64>().ok());
             out.push(Gpu {
                 name,
                 vendor: "amd".into(),
                 usage: Some(busy),
-                temp: temps.pci.iter().find(|(p, _)| *p == real).map(|(_, t)| *t),
+                temp: reading.map(|r| r.temp),
+                temp_limit: reading.and_then(|r| r.limit),
                 vram_used: num("mem_info_vram_used"),
                 vram_total: num("mem_info_vram_total"),
                 power_w: None,

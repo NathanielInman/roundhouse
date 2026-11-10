@@ -40,9 +40,10 @@ pub fn line(snap: &Snapshot, cfg: &Config) -> BarLine {
         tip.extend(snap.lamp.reasons.iter().map(|r| format!("• {}", r.text)));
     }
     tip.push(String::new());
+    let t = &cfg.lamp;
     let mut cpu = format!("CPU {:.0}%", m.cpu.usage);
-    if let Some(t) = m.cpu.temp {
-        cpu.push_str(&format!(" · {t:.0}°C"));
+    if let Some(temp) = m.cpu.temp {
+        cpu.push_str(&format!(" · {}", t.cpu_temp(m.cpu.temp_limit).show(temp)));
     }
     tip.push(cpu);
     tip.push(format!(
@@ -55,8 +56,8 @@ pub fn line(snap: &Snapshot, cfg: &Config) -> BarLine {
         if let Some(u) = g.usage {
             s.push_str(&format!(" {u:.0}%"));
         }
-        if let Some(t) = g.temp {
-            s.push_str(&format!(" · {t:.0}°C"));
+        if let Some(temp) = g.temp {
+            s.push_str(&format!(" · {}", t.gpu_temp(g.temp_limit).show(temp)));
         }
         tip.push(s);
     }
@@ -92,10 +93,12 @@ mod tests {
     fn calm_line_pins_cpu_temp() {
         let mut s = Snapshot::default();
         s.machine.cpu.temp = Some(54.4);
+        s.machine.cpu.temp_limit = Some(95.0);
         let l = line(&s, &Config::default());
         assert!(l.text.ends_with(" 54°"));
         assert_eq!(l.class, "calm");
         assert!(l.tooltip.starts_with("All calm"));
+        assert!(l.tooltip.contains("CPU 0% · 54 / 95°C"));
     }
 
     #[test]

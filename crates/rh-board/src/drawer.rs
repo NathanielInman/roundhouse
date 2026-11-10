@@ -8,7 +8,7 @@ use gtk::prelude::*;
 use gtk::{gdk, glib};
 use gtk4_layer_shell::{Edge as LsEdge, KeyboardMode, Layer, LayerShell};
 use rh_core::config::Config;
-use rh_core::model::{DiskKind, Level, Snapshot};
+use rh_core::model::{DiskKind, Level, Snapshot, TempLimit};
 use rh_core::protocol::{Event, Request};
 use rh_core::{duration, human};
 use std::cell::{Cell, RefCell};
@@ -108,6 +108,26 @@ fn level_class(pct: f32, warn: f32, act: f32) -> &'static str {
         "heads-up"
     } else {
         ""
+    }
+}
+
+/// The same severity class for a level, empty when calm.
+fn level_css(l: Level) -> &'static str {
+    match l {
+        Level::Calm => "",
+        l => l.as_str(),
+    }
+}
+
+/// Shows a temperature against its limit and colors it past heads-up.
+fn set_temp(w: &gtk::Label, temp: Option<f32>, limit: TempLimit) {
+    w.set_label(&temp.map(|t| limit.show(t)).unwrap_or_default());
+    for c in ["heads-up", "act"] {
+        w.remove_css_class(c);
+    }
+    let class = temp.map_or("", |t| level_css(limit.level(t)));
+    if !class.is_empty() {
+        w.add_css_class(class);
     }
 }
 
@@ -541,7 +561,7 @@ impl Drawer {
             self.select_quiet();
         }
 
-        self.render_machine(s);
+        self.render_machine(s, &cfg);
         self.render_storage(s, &cfg);
         self.render_yard(s);
         let n_tabs = self.tabs.iter().filter(|(_, b)| b.is_visible()).count();
@@ -549,7 +569,7 @@ impl Drawer {
             .set_label(&format!("1-{n_tabs} tabs · Esc close · {}", s.host.os));
     }
 
-    fn render_machine(&self, s: &Snapshot) {
+    fn render_machine(&self, s: &Snapshot, cfg: &Config) {
         let m = &s.machine;
         let p = &self.machine;
 
@@ -593,9 +613,11 @@ impl Drawer {
         p.cpu
             .title
             .set_label(&format!("CPU · {}", m.cpu.model.to_uppercase()));
-        p.cpu
-            .aside
-            .set_label(&m.cpu.temp.map(|t| format!("{t:.0}°C")).unwrap_or_default());
+        set_temp(
+            &p.cpu.aside,
+            m.cpu.temp,
+            cfg.lamp.cpu_temp(m.cpu.temp_limit),
+        );
         p.cpu.value.set_label(&format!("{:.0}", m.cpu.usage));
         p.cpu.unit.set_label(&match m.cpu.mhz {
             Some(mhz) => format!("% · {:.1} GHz", mhz / 1000.0),
@@ -609,9 +631,7 @@ impl Drawer {
                 p.gpu
                     .title
                     .set_label(&format!("GPU · {}", g.name.to_uppercase()));
-                p.gpu
-                    .aside
-                    .set_label(&g.temp.map(|t| format!("{t:.0}°C")).unwrap_or_default());
+                set_temp(&p.gpu.aside, g.temp, cfg.lamp.gpu_temp(g.temp_limit));
                 p.gpu.value.set_label(
                     &g.usage
                         .map(|u| format!("{u:.0}"))
@@ -720,10 +740,10 @@ impl Drawer {
             };
             let (right, right_class) = match (d.kind, d.temp) {
                 (DiskKind::OnDemand, _) => ("not mounted, not woken".to_string(), ""),
-                (_, Some(temp)) => (
-                    format!("{temp:.0}°C"),
-                    level_class(temp, t.drive_temp_warn, t.drive_temp_act),
-                ),
+                (_, Some(temp)) => {
+                    let limit = t.drive_temp(d.temp_limit);
+                    (limit.show(temp), level_css(limit.level(temp)))
+                }
                 _ => (String::new(), ""),
             };
             rows.push(RowData {

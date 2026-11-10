@@ -2,7 +2,7 @@
 //! needs you, with every reason listed so the drawer can say why.
 
 use crate::config::LampConfig;
-use crate::model::{DiskKind, Lamp, Level, Reason, Snapshot};
+use crate::model::{DiskKind, Lamp, Level, Reason, Snapshot, TempLimit};
 
 fn push(out: &mut Vec<Reason>, level: Level, tab: &str, text: String) {
     out.push(Reason {
@@ -10,6 +10,20 @@ fn push(out: &mut Vec<Reason>, level: Level, tab: &str, text: String) {
         text,
         tab: tab.into(),
     });
+}
+
+/// A temperature at or past its heads-up line, said against the limit so the
+/// number means something.
+fn hot(out: &mut Vec<Reason>, tab: &str, name: &str, temp: f32, limit: TempLimit) {
+    let level = limit.level(temp);
+    if level != Level::Calm {
+        push(
+            out,
+            level,
+            tab,
+            format!("{name} is at {temp:.0}°C (limit {:.0}°C)", limit.act),
+        );
+    }
 }
 
 /// Works out the lamp from a snapshot. Pure, so the rules are easy to test.
@@ -45,58 +59,16 @@ pub fn evaluate(s: &Snapshot, t: &LampConfig) -> Lamp {
         }
         if let Some(temp) = disk.temp {
             let name = disk.model.as_deref().unwrap_or(&disk.name);
-            if temp >= t.drive_temp_act {
-                push(
-                    &mut r,
-                    Level::Act,
-                    "storage",
-                    format!("{name} is at {temp:.0}°C"),
-                );
-            } else if temp >= t.drive_temp_warn {
-                push(
-                    &mut r,
-                    Level::HeadsUp,
-                    "storage",
-                    format!("{name} is at {temp:.0}°C"),
-                );
-            }
+            hot(&mut r, "storage", name, temp, t.drive_temp(disk.temp_limit));
         }
     }
 
     if let Some(temp) = m.cpu.temp {
-        if temp >= t.cpu_temp_act {
-            push(
-                &mut r,
-                Level::Act,
-                "machine",
-                format!("CPU is at {temp:.0}°C"),
-            );
-        } else if temp >= t.cpu_temp_warn {
-            push(
-                &mut r,
-                Level::HeadsUp,
-                "machine",
-                format!("CPU is at {temp:.0}°C"),
-            );
-        }
+        hot(&mut r, "machine", "CPU", temp, t.cpu_temp(m.cpu.temp_limit));
     }
     for g in &m.gpus {
         if let Some(temp) = g.temp {
-            if temp >= t.gpu_temp_act {
-                push(
-                    &mut r,
-                    Level::Act,
-                    "machine",
-                    format!("{} is at {temp:.0}°C", g.name),
-                );
-            } else if temp >= t.gpu_temp_warn {
-                push(
-                    &mut r,
-                    Level::HeadsUp,
-                    "machine",
-                    format!("{} is at {temp:.0}°C", g.name),
-                );
-            }
+            hot(&mut r, "machine", &g.name, temp, t.gpu_temp(g.temp_limit));
         }
     }
 
@@ -198,6 +170,29 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(evaluate(&s, &LampConfig::default()).level, Level::Calm);
+    }
+
+    #[test]
+    fn temperatures_use_each_part_limit() {
+        let mut s = Snapshot::default();
+        // 70°C is past the old fixed 65°C, but a 990 PRO warns at 82°C.
+        s.disks.push(Disk {
+            name: "nvme1n1".into(),
+            model: Some("Samsung SSD 990 PRO 2TB".into()),
+            temp: Some(70.0),
+            temp_limit: Some(81.85),
+            ..Default::default()
+        });
+        s.machine.cpu.temp = Some(87.0);
+        s.machine.cpu.temp_limit = Some(95.0);
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.level, Level::HeadsUp);
+        assert_eq!(lamp.reasons.len(), 1);
+        assert_eq!(lamp.reasons[0].text, "CPU is at 87°C (limit 95°C)");
+        // A 7800X3D throttles at 89°C.
+        s.machine.cpu.temp = Some(89.0);
+        s.machine.cpu.temp_limit = Some(89.0);
+        assert_eq!(evaluate(&s, &LampConfig::default()).level, Level::Act);
     }
 
     #[test]

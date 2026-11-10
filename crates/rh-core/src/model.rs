@@ -58,6 +58,9 @@ pub struct Cpu {
     /// Percent busy across all threads since the last sample.
     pub usage: f32,
     pub temp: Option<f32>,
+    /// The temperature where the CPU throttles (TjMax), when known.
+    #[serde(default)]
+    pub temp_limit: Option<f32>,
     pub mhz: Option<f32>,
     /// Recent usage, oldest first.
     pub history: Vec<f32>,
@@ -112,6 +115,9 @@ pub struct Gpu {
     pub vendor: String,
     pub usage: Option<f32>,
     pub temp: Option<f32>,
+    /// The temperature where the card slows itself down, as it reports it.
+    #[serde(default)]
+    pub temp_limit: Option<f32>,
     pub vram_used: Option<u64>,
     pub vram_total: Option<u64>,
     pub power_w: Option<f32>,
@@ -136,6 +142,9 @@ pub struct Disk {
     pub model: Option<String>,
     pub kind: DiskKind,
     pub temp: Option<f32>,
+    /// The drive's own warning temperature (NVMe WCTEMP), as it reports it.
+    #[serde(default)]
+    pub temp_limit: Option<f32>,
     pub filesystems: Vec<Filesystem>,
 }
 
@@ -192,6 +201,30 @@ impl Level {
             Level::HeadsUp => "heads-up",
             Level::Act => "act",
         }
+    }
+}
+
+/// Where one temperature sensor turns the lamp yellow and red, in °C.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TempLimit {
+    pub warn: f32,
+    pub act: f32,
+}
+
+impl TempLimit {
+    pub fn level(&self, temp: f32) -> Level {
+        if temp >= self.act {
+            Level::Act
+        } else if temp >= self.warn {
+            Level::HeadsUp
+        } else {
+            Level::Calm
+        }
+    }
+
+    /// "58 / 95°C": the reading next to the point where the part throttles.
+    pub fn show(&self, temp: f32) -> String {
+        format!("{temp:.0} / {:.0}°C", self.act)
     }
 }
 

@@ -222,9 +222,10 @@ fn status(json: bool) -> Result<i32> {
         ),
     };
     println!("{:<12}{lamp}", "lamp");
+    let t = Config::load().0.lamp;
     let mut cpu = format!("{}  {:.0}%", m.cpu.model, m.cpu.usage);
-    if let Some(t) = m.cpu.temp {
-        cpu.push_str(&format!("  {t:.0}°C"));
+    if let Some(temp) = m.cpu.temp {
+        cpu.push_str(&format!("  {}", t.cpu_temp(m.cpu.temp_limit).show(temp)));
     }
     println!("{:<12}{cpu}", "cpu");
     println!(
@@ -252,8 +253,8 @@ fn status(json: bool) -> Result<i32> {
         if let Some(u) = g.usage {
             line.push_str(&format!("  {u:.0}%"));
         }
-        if let Some(t) = g.temp {
-            line.push_str(&format!("  {t:.0}°C"));
+        if let Some(temp) = g.temp {
+            line.push_str(&format!("  {}", t.gpu_temp(g.temp_limit).show(temp)));
         }
         if let (Some(u), Some(t)) = (g.vram_used, g.vram_total) {
             line.push_str(&format!("  {} / {}", human(u), human(t)));
@@ -278,8 +279,8 @@ fn status(json: bool) -> Result<i32> {
             (Some(model), _) => format!("{model} ({})", d.name),
             (None, _) => d.name.clone(),
         };
-        if let Some(t) = d.temp {
-            head.push_str(&format!("  {t:.0}°C"));
+        if let Some(temp) = d.temp {
+            head.push_str(&format!("  {}", t.drive_temp(d.temp_limit).show(temp)));
         }
         println!("  {head}");
         if d.kind == DiskKind::OnDemand {

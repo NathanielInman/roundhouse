@@ -1,6 +1,7 @@
 //! `~/.config/roundhouse/config.toml`. Every key is optional; an empty or
 //! missing file gives a working drawer.
 
+use crate::model::TempLimit;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -98,15 +99,16 @@ pub struct LampConfig {
     /// Filesystem use, in percent.
     pub disk_warn: f32,
     pub disk_act: f32,
-    /// CPU package temperature, in °C.
-    pub cpu_temp_warn: f32,
-    pub cpu_temp_act: f32,
+    /// CPU package temperature, in °C. Unset, each one follows the part's
+    /// own limit (see `TempLimit`).
+    pub cpu_temp_warn: Option<f32>,
+    pub cpu_temp_act: Option<f32>,
     /// GPU temperature, in °C.
-    pub gpu_temp_warn: f32,
-    pub gpu_temp_act: f32,
+    pub gpu_temp_warn: Option<f32>,
+    pub gpu_temp_act: Option<f32>,
     /// NVMe and disk temperature, in °C.
-    pub drive_temp_warn: f32,
-    pub drive_temp_act: f32,
+    pub drive_temp_warn: Option<f32>,
+    pub drive_temp_act: Option<f32>,
     /// Memory pressure (PSI `some` avg60), in percent of time stalled.
     pub mem_pressure_warn: f32,
     /// Memory pressure (PSI `full` avg10).
@@ -120,16 +122,68 @@ impl Default for LampConfig {
         LampConfig {
             disk_warn: 85.0,
             disk_act: 95.0,
-            cpu_temp_warn: 85.0,
-            cpu_temp_act: 95.0,
-            gpu_temp_warn: 83.0,
-            gpu_temp_act: 90.0,
-            drive_temp_warn: 65.0,
-            drive_temp_act: 75.0,
+            cpu_temp_warn: None,
+            cpu_temp_act: None,
+            gpu_temp_warn: None,
+            gpu_temp_act: None,
+            drive_temp_warn: None,
+            drive_temp_act: None,
             mem_pressure_warn: 10.0,
             mem_pressure_act: 10.0,
             mem_free_act: 5.0,
         }
+    }
+}
+
+/// Degrees under a part's own limit where the lamp turns yellow.
+pub const TEMP_HEADROOM: f32 = 10.0;
+
+/// Builds the thresholds for one sensor: the keys the user set, else
+/// `TEMP_HEADROOM` under the hardware's limit and the limit itself, else
+/// `fallback` when the hardware reports nothing.
+fn temp_limit(
+    warn: Option<f32>,
+    act: Option<f32>,
+    hw: Option<f32>,
+    fallback: TempLimit,
+) -> TempLimit {
+    let base = hw.map_or(fallback, |l| TempLimit {
+        warn: l - TEMP_HEADROOM,
+        act: l,
+    });
+    let act = act.unwrap_or(base.act);
+    TempLimit {
+        warn: warn.unwrap_or(base.warn).min(act),
+        act,
+    }
+}
+
+impl LampConfig {
+    /// `hw` is the CPU's TjMax when known.
+    pub fn cpu_temp(&self, hw: Option<f32>) -> TempLimit {
+        let fallback = TempLimit {
+            warn: 85.0,
+            act: 95.0,
+        };
+        temp_limit(self.cpu_temp_warn, self.cpu_temp_act, hw, fallback)
+    }
+
+    /// `hw` is the card's slowdown temperature when known.
+    pub fn gpu_temp(&self, hw: Option<f32>) -> TempLimit {
+        let fallback = TempLimit {
+            warn: 83.0,
+            act: 90.0,
+        };
+        temp_limit(self.gpu_temp_warn, self.gpu_temp_act, hw, fallback)
+    }
+
+    /// `hw` is the drive's warning temperature when known.
+    pub fn drive_temp(&self, hw: Option<f32>) -> TempLimit {
+        let fallback = TempLimit {
+            warn: 65.0,
+            act: 75.0,
+        };
+        temp_limit(self.drive_temp_warn, self.drive_temp_act, hw, fallback)
     }
 }
 
@@ -190,6 +244,36 @@ mod tests {
         assert_eq!(c.bar.namespace, "waybar");
         assert_eq!(c.storage.hide, vec!["/swap".to_string()]);
         assert_eq!(c.lamp.disk_warn, 85.0);
+    }
+
+    #[test]
+    fn temperatures_follow_the_hardware() {
+        let t = LampConfig::default();
+        // A Samsung 990 PRO reports an 81.85°C warning temperature.
+        assert_eq!(
+            t.drive_temp(Some(81.85)),
+            TempLimit {
+                warn: 71.85,
+                act: 81.85
+            }
+        );
+        // Nothing reported: the old fixed thresholds.
+        assert_eq!(
+            t.gpu_temp(None),
+            TempLimit {
+                warn: 83.0,
+                act: 90.0
+            }
+        );
+        // A key the user set wins, and warn never passes act.
+        let t = Config::parse("[lamp]\ncpu_temp_act = 80\n").unwrap().lamp;
+        assert_eq!(
+            t.cpu_temp(Some(95.0)),
+            TempLimit {
+                warn: 80.0,
+                act: 80.0
+            }
+        );
     }
 
     #[test]
