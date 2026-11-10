@@ -9,6 +9,7 @@ pub mod model;
 pub mod paths;
 pub mod protocol;
 pub mod transport;
+pub mod waybar;
 
 pub use bar_anchor::{Anchor, Edge};
 
