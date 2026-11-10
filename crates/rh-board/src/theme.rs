@@ -69,8 +69,19 @@ pub fn css(bar: Option<&BarTheme>, cfg: &Config) -> String {
     let mut out = String::new();
     let mut font = cfg.theme.font.clone();
     if let Some(t) = bar.filter(|_| cfg.theme.from == "waybar") {
-        let bg = t.background.as_deref().and_then(parse_color);
-        let fg = t.foreground.as_deref().and_then(parse_color);
+        // Only the bar's hue counts: a floating bar is often transparent
+        // (rgba(.., 0)), and mixing that alpha into the tiles would make
+        // the drawer see-through.
+        let bg = t
+            .background
+            .as_deref()
+            .and_then(parse_color)
+            .map(|c| c.with_alpha(1.0));
+        let fg = t
+            .foreground
+            .as_deref()
+            .and_then(parse_color)
+            .map(|c| c.with_alpha(1.0));
         if let Some(bg) = bg {
             out.push_str(&format!(
                 "@define-color rh_panel {};\n",
@@ -150,5 +161,15 @@ mod tests {
         let mut cfg = Config::default();
         cfg.theme.from = "none".into();
         assert!(css(Some(&t), &cfg).is_empty());
+    }
+
+    #[test]
+    fn transparent_bar_keeps_an_opaque_drawer() {
+        let t = rh_core::waybar::parse_style(
+            "window#waybar { background: rgba(40, 42, 46, 0); color: #C5C8C6; }",
+        );
+        let c = css(Some(&t), &Config::default());
+        assert!(c.contains("@define-color rh_panel rgba(40, 42, 46, 0.970);"));
+        assert!(!c.contains(", 0.000)"), "no tile may inherit the bar's zero alpha: {c}");
     }
 }
