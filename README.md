@@ -1,7 +1,7 @@
 <h1 align="center">Roundhouse</h1>
 
 <p align="center">
-  <img src="docs/assets/hero.svg" width="100%" alt="A waybar with one lamp icon. A click on it opens the Roundhouse drawer out of the icon: CPU, GPU, memory, pressure and network tiles with sparklines, memory by app, then the Storage tab with disks and a network share.">
+  <img src="docs/assets/hero.svg" width="100%" alt="A waybar with one green lamp dot. A click on it opens the Roundhouse drawer out of the dot: a line saying Switchyard is building storefront, CPU and GPU tiles with temperatures against their limits, memory, pressure, network and memory by app, then the Storage tab with disks and a network share. The tab row ends with a link to the Switchyard board.">
 </p>
 
 <p align="center">
@@ -51,7 +51,7 @@ Roundhouse replaces.
 |---|---|
 | **Machine** | Why is it slow right now? CPU and GPU with sparklines, memory, pressure stall (PSI), which says whether anything is actually waiting, and network throughput across every real interface (renamed NICs need no config). Memory by app, counted from each app's cgroup, so 40 Chrome processes read as one line. Scopes started with `systemd-run` or `lowprio` show their memory cap. |
 | **Storage** | Where did my space go? Each physical disk with its model and NVMe temperature, and the filesystems on it. btrfs subvolumes and bind mounts fold into one line. Network shares are sized on a helper thread with a deadline, so a NAS that went away never stalls anything, and automount points that nobody has opened are listed without being woken. |
-| **Switchyard** | Shows only while Switchyard runs: the main line, the queue, what's building and what failed. One button opens the Switchyard board from the same icon. |
+| **Switchyard ↗** | Not a page: a link to the Switchyard board, shown only while Switchyard runs. Its dot says what Switchyard is doing (blue while it builds, red when something failed). A click or its number key closes the drawer and opens the board from the same icon. |
 
 `rh status` prints the same thing in a terminal, and `rh status --json` gives
 it to scripts and agents.
@@ -63,9 +63,11 @@ other. Each one finds the other's socket in `$XDG_RUNTIME_DIR`; if it is not
 there, the features that depend on it stay hidden. Nothing errors, nothing
 waits.
 
-- With Switchyard running, Roundhouse gains the Switchyard tab, Switchyard's
-  build in its bar tooltip, and a handoff button that opens the Switchyard
-  board from the same icon.
+- With Switchyard running, each panel links to the other from the end of its
+  tab row (`● Switchyard ↗` here, `● Roundhouse ↗` on the board), and a
+  click swaps one for the other from the same icon. While a heavy build runs
+  or waits, the Machine tab and the bar tooltip say so in one line
+  ("Switchyard is building storefront · 1 queued").
 - With Roundhouse running, Switchyard holds the next heavy build while the
   lamp says act (memory stalling, a filesystem past 95%, a CPU or GPU at its
   limit), and the waiting tile says why. It starts on its own once the lamp
@@ -117,8 +119,9 @@ the bar can color it:
 #custom-roundhouse.act { color: #bf616a; }
 ```
 
-In the drawer, <kbd>1</kbd>-<kbd>3</kbd> or <kbd>Tab</kbd> switch tabs, and
-<kbd>Esc</kbd> or a click outside closes it.
+In the drawer, <kbd>1</kbd>-<kbd>2</kbd> or <kbd>Tab</kbd> switch tabs,
+<kbd>3</kbd> opens the Switchyard board while it runs, and <kbd>Esc</kbd> or
+a click outside closes it.
 
 ## Config
 
@@ -137,7 +140,7 @@ from = "waybar"       # or "none" for the built-in theme
 
 [drawer]
 width = 460
-tabs = ["machine", "storage", "switchyard"]
+tabs = ["machine", "storage", "switchyard"]  # switchyard is the link to its board
 
 [storage]
 hide = ["/boot"]      # mount points to leave out

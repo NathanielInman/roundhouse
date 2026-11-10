@@ -61,10 +61,13 @@ pub fn line(snap: &Snapshot, cfg: &Config) -> BarLine {
         }
         tip.push(s);
     }
-    if let Some(y) = &snap.siblings.switchyard {
-        if let Some(cur) = &y.current {
-            tip.push(format!("Switchyard: building {}", y.label(cur)));
-        }
+    if let Some(line) = snap
+        .siblings
+        .switchyard
+        .as_ref()
+        .and_then(|y| y.status_line())
+    {
+        tip.push(line);
     }
     BarLine {
         text,

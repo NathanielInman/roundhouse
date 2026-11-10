@@ -206,24 +206,28 @@ The rules:
 4. **Handoff keeps the anchor.** When one opens the other, it sends the same
    `Anchor` it opened with, so the second panel grows out of the same icon.
 5. **One panel at a time.** Whichever panel opens sends `{"cmd":"hide"}` to
-   the other, so clicking the other icon in the bar (or the handoff button)
+   the other, so clicking the other icon in the bar (or the other's link)
    never leaves both open.
+6. **Links, not pages.** Each panel's tab row ends with a link to the other
+   (`● Switchyard ↗` here, `● Roundhouse ↗` on the board) while the other
+   runs. The dot carries the other's state; a click or the link's number key
+   closes this panel and opens the other with the same anchor. Tab and
+   Shift+Tab skip the link, so cycling never leaves the panel.
 
 What Roundhouse uses from Switchyard today:
 
 | Request | Used for |
 |---|---|
-| `{"cmd":"snapshot"}` | The Switchyard tab: `aggregate.phase`, `aggregate.building`, `aggregate.running`, `aggregate.failed`, `mainline.current`, `mainline.queue`, `mainline.waiting_memory`, `tasks[].id` and `tasks[].label`. |
-| `{"cmd":"show","anchor":{...}}` | The handoff button. |
+| `{"cmd":"snapshot"}` | The link's dot: `aggregate.phase`, a CSS class on `.yard-dot` (blue while queued, waiting, building or running, green on ok, red on failed). The one-line status on the Machine tab and in the bar tooltip, while a heavy build runs or waits: `mainline.current`, `mainline.queue`, `aggregate.building`, `tasks[].id`, `tasks[].label`, and the queue head's `tasks[].phase` and `message` ("held: Roundhouse says ..."). |
+| `{"cmd":"show","anchor":{...}}` | The Switchyard link and the status line. `rh toggle --tab switchyard` asks for it directly while Switchyard runs. |
 
 What Switchyard uses from Roundhouse:
 
 | Request | Used for |
 |---|---|
 | `{"cmd":"snapshot"}` on `rh.sock` | `lamp.level` and `lamp.reasons[].level`/`text`. While the lamp is at `act`, Switchyard holds the next heavy build with the reason as its message and starts it on the first calm answer (`mainline.respect_roundhouse` in Switchyard's config). |
-
-Not used yet: `{"cmd":"show","anchor":{...}}` for a handoff from
-Switchyard's board to this drawer.
+| `{"cmd":"hide"}` on `rh.sock` | Sent when the board opens, so the drawer closes. |
+| `{"cmd":"show","anchor":{...}}` on `rh.sock` | The board's Roundhouse link, whose dot is `lamp.level`. |
 
 The `lamp` shape (`level`, and `reasons` with `level`, `text` and `tab`) is
 part of the sibling contract: change it only by adding fields.
@@ -257,7 +261,7 @@ holds the show until it subscribes.
 
 | Key | Action |
 |---|---|
-| <kbd>1</kbd>-<kbd>9</kbd> | Tab by position |
-| <kbd>Tab</kbd>, <kbd>→</kbd>, <kbd>l</kbd> | Next tab |
-| <kbd>Shift</kbd>+<kbd>Tab</kbd>, <kbd>←</kbd>, <kbd>h</kbd> | Previous tab |
+| <kbd>1</kbd>-<kbd>9</kbd> | Tab by position; the Switchyard link's number opens the board |
+| <kbd>Tab</kbd>, <kbd>→</kbd>, <kbd>l</kbd> | Next tab (skips the link) |
+| <kbd>Shift</kbd>+<kbd>Tab</kbd>, <kbd>←</kbd>, <kbd>h</kbd> | Previous tab (skips the link) |
 | <kbd>Esc</kbd> | Close |

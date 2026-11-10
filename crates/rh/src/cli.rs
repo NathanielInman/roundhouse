@@ -21,7 +21,7 @@ Usage:
   rh daemon                           run the daemon in the foreground
   rh --version
 
-Tabs: machine, storage, switchyard (while Switchyard runs).
+Tabs: machine, storage; switchyard opens Switchyard's board (while it runs).
 Config: ~/.config/roundhouse/config.toml
 ";
 
@@ -315,8 +315,8 @@ fn status(json: bool) -> Result<i32> {
     match &s.siblings.switchyard {
         Some(y) => {
             let mut line = format!("{} · {} tasks", y.phase, y.tasks);
-            if let Some(c) = &y.current {
-                line.push_str(&format!(" · building {}", y.label(c)));
+            if let Some(status) = y.status_line() {
+                line.push_str(&format!(" · {status}"));
             }
             println!("{:<12}{line}", "switchyard");
         }
@@ -467,12 +467,12 @@ fn doctor() -> Result<i32> {
         Some(y) => check(
             Some(true),
             "Switchyard",
-            &format!("running, {} tasks; its tab is on", y.tasks),
+            &format!("running, {} tasks; the drawer links to its board", y.tasks),
         ),
         None => check(
             None,
             "Switchyard",
-            "not running (optional; its tab appears when it is)",
+            "not running (optional; the drawer links to its board when it is)",
         ),
     }
     Ok(if failed { 1 } else { 0 })

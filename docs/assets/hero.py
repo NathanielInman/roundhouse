@@ -30,7 +30,7 @@ FONT = "JetBrains Mono, DejaVu Sans Mono, Menlo, Consolas, monospace"
 # The lamp sits in the bar; the drawer opens above it, clamped to the screen.
 BAR_Y, BAR_H = 616, 44
 LAMP_X, LAMP_Y = 1006, BAR_Y + BAR_H / 2
-DW, DH = 520, 528
+DW, DH = 520, 568
 DX, DY = W - DW - 18, BAR_Y - 12 - DH
 
 random.seed(7)
@@ -76,11 +76,11 @@ def spark(x, y, w, h, values, vmax, cls, delay):
     add(f'<circle cx="{ex - 1:.1f}" cy="{ey:.1f}" r="2.6" fill="{ACCENT}" class="a fade" style="animation-delay:{delay + 0.5}s"/>')
 
 
-def tile(x, y, w, h, label, aside, value, unit, delay, values=None, vmax=100, note=None):
+def tile(x, y, w, h, label, aside, value, unit, delay, values=None, vmax=100, note=None, aside_fill=DIM):
     add(f'<g class="a rise" style="animation-delay:{delay}s">')
     add(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
     text(x + 12, y + 20, label, 10.5, DIM, 700, spacing=1)
-    text(x + w - 12, y + 20, aside, 10.5, DIM, 700, "end", 1)
+    text(x + w - 12, y + 20, aside, 10.5, aside_fill, 700, "end", 1)
     text(x + 12, y + 50, value, 25, FG, 700)
     text(x + 14 + len(value) * 15.5, y + 50, unit, 11.5, DIM)
     if values:
@@ -96,16 +96,6 @@ def meter_row(x, y, w, name, detail, right, frac, color, cls, delay):
     text(x + w, y, right, 12.5, DIM, anchor="end")
     add(f'<rect x="{x}" y="{y + 7}" width="{w}" height="4" rx="2" fill="{TILE_LINE}"/>')
     add(f'<rect x="{x}" y="{y + 7}" width="{max(3, w * frac):.1f}" height="4" rx="2" fill="{color}" class="a {cls}" style="animation-delay:{delay}s"/>')
-
-
-def lamp_icon(cx, cy, r, center):
-    add(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{BAR_FG}" stroke-width="1.6"/>')
-    for k in range(8):
-        a = k * math.pi / 4
-        x1, y1 = cx + math.cos(a) * (r - 4), cy + math.sin(a) * (r - 4)
-        x2, y2 = cx + math.cos(a) * (r - 1), cy + math.sin(a) * (r - 1)
-        add(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{BAR_FG}" stroke-width="1.6" stroke-linecap="round"/>')
-    add(f'<circle cx="{cx}" cy="{cy}" r="{r * 0.36:.1f}" fill="{center}"/>')
 
 
 def pct(p):
@@ -186,7 +176,7 @@ css += """
 }
 """
 
-add(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}" role="img" aria-label="A waybar with one lamp icon. A click on it opens the Roundhouse drawer out of the icon: CPU, GPU, memory, pressure and network tiles with sparklines, memory by app, then the Storage tab with disks and a network share.">')
+add(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}" role="img" aria-label="A waybar with one green lamp dot. A click on it opens the Roundhouse drawer out of the dot: a line saying Switchyard is building storefront, CPU and GPU tiles with temperatures against their limits, memory, pressure, network and memory by app, then the Storage tab with disks and a network share. The tab row ends with a link to the Switchyard board.">')
 add(f"<style>{css}</style>")
 add(f"""<defs>
 <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{BG0}"/><stop offset="1" stop-color="{BG1}"/></linearGradient>
@@ -225,11 +215,11 @@ for x, s in mods:
     text(x, mid, s, 14, BAR_DIM)
     add(f'<line x1="{x - 14}" y1="{BAR_Y + 10}" x2="{x - 14}" y2="{BAR_Y + BAR_H - 10}" stroke="{BAR_LINE}"/>')
 add(f'<line x1="{LAMP_X - 30}" y1="{BAR_Y + 10}" x2="{LAMP_X - 30}" y2="{BAR_Y + BAR_H - 10}" stroke="{BAR_LINE}"/>')
-add(f'<rect id="lampbg" class="a" x="{LAMP_X - 22}" y="{BAR_Y + 7}" width="74" height="30" rx="7" fill="{ACCENT}" fill-opacity=".22"/>')
+# The lamp: one dot in the lamp's color, no number.
+add(f'<rect id="lampbg" class="a" x="{LAMP_X - 18}" y="{BAR_Y + 7}" width="36" height="30" rx="7" fill="{ACCENT}" fill-opacity=".22"/>')
 add(f'<circle class="pulse" cx="{LAMP_X}" cy="{LAMP_Y}" r="13" fill="none" stroke="{CALM}" stroke-width="2"/>')
-lamp_icon(LAMP_X, LAMP_Y, 11, CALM)
-text(LAMP_X + 18, mid, "54°", 14, BAR_FG)
-add(f'<line x1="{LAMP_X + 62}" y1="{BAR_Y + 10}" x2="{LAMP_X + 62}" y2="{BAR_Y + BAR_H - 10}" stroke="{BAR_LINE}"/>')
+add(f'<circle cx="{LAMP_X}" cy="{LAMP_Y}" r="7.5" fill="{CALM}"/>')
+add(f'<line x1="{LAMP_X + 30}" y1="{BAR_Y + 10}" x2="{LAMP_X + 30}" y2="{BAR_Y + BAR_H - 10}" stroke="{BAR_LINE}"/>')
 text(W - 22, mid, "14:32", 14, BAR_FG, anchor="end")
 
 # ---- the drawer
@@ -245,26 +235,34 @@ add(f'<rect x="16" y="68" width="{DW - 32}" height="34" rx="9" fill="{TILE}"/>')
 add(f'<rect id="pill" class="a" x="19" y="71" width="160" height="28" rx="7" fill="{ACCENT}"/>')
 text(99, 90, "Machine", 13, DARK, 700, "middle", cls="a\" id=\"tab1")
 text(260, 90, "Storage", 13, DIM, 700, "middle", cls="a\" id=\"tab2")
-text(421, 90, "Switchyard", 13, DIM, 700, "middle")
+# Switchyard is a link to its board, dotted with what it is doing.
+add(f'<circle cx="368" cy="85.5" r="3" fill="{ACCENT}"/>')
+text(421, 90, "Switchyard", 13, DIM, 400, "middle")
+text(474, 90, "\u2197", 13, DIM, 400, "middle")
 
 # Machine view
 add('<g id="mview" class="a">')
 tw = (DW - 40) / 2
-tile(16, 114, tw, 92, "CPU · RYZEN 7 9800X3D", "54°C", "12", "% · 4.7 GHz", 0.0, walk(40, 18, 14), 60)
-tile(24 + tw, 114, tw, 92, "GPU · RTX 3080", "41°C", "8", "% · 2.1 G / 10 G", 0.06, walk(40, 10, 10), 60)
-tile(16, 214, tw, 92, "MEMORY", "SWAP 0 B", "13G", "/ 60 G", 0.12, walk(40, 22, 1.5, pull=0.3), 60)
-tile(24 + tw, 214, tw, 92, "PRESSURE", "SOME · 10 S", "0.0", "mem · cpu 1.8 · io 0.3", 0.18, note="nothing is waiting")
-tile(16, 314, DW - 32, 86, "NETWORK · ENO1", "203.0.113.42", "↓ 1.2 MB/s", "↑ 84 kB/s", 0.24, walk(60, 30, 26, pull=0.08), 100)
+# A heavy build explains a busy machine: one line, a click opens the board.
+add(f'<g class="a rise" style="animation-delay:0s">')
+add(f'<rect x="16" y="114" width="{DW - 32}" height="32" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
+text(28, 135, "Switchyard is building storefront · 1 queued", 12.5, FG)
+add("</g>")
+tile(16, 154, tw, 92, "CPU · RYZEN 7 9800…", "54 / 95°C", "12", "% · 4.7 GHz", 0.0, walk(40, 18, 14), 60, aside_fill=CALM)
+tile(24 + tw, 154, tw, 92, "GPU · RTX 3080", "41 / 95°C", "8", "% · 2.1 G / 10 G", 0.06, walk(40, 10, 10), 60, aside_fill=CALM)
+tile(16, 254, tw, 92, "MEMORY", "SWAP 0 B", "13G", "/ 60 G", 0.12, walk(40, 22, 1.5, pull=0.3), 60)
+tile(24 + tw, 254, tw, 92, "PRESSURE", "SOME · 10 S", "0.0", "mem · cpu 1.8 · io 0.3", 0.18, note="nothing is waiting")
+tile(16, 354, DW - 32, 86, "NETWORK · ENO1", "203.0.113.42", "↓ 1.2 MB/s", "↑ 84 kB/s", 0.24, walk(60, 30, 26, pull=0.08), 100)
 add(f'<g class="a rise" style="animation-delay:.3s">')
-add(f'<rect x="16" y="408" width="{DW - 32}" height="104" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
-text(28, 428, "MEMORY BY APP", 10.5, DIM, 700, spacing=1)
-text(DW - 28, 428, "NOT BY PID", 10.5, DIM, 700, "end", 1)
+add(f'<rect x="16" y="448" width="{DW - 32}" height="104" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
+text(28, 468, "MEMORY BY APP", 10.5, DIM, 700, spacing=1)
+text(DW - 28, 468, "NOT BY PID", 10.5, DIM, 700, "end", 1)
 for i, (n, d, r, f, c) in enumerate([
     ("Chrome", "40 procs", "7.6 G", 0.13, ACCENT),
     ("Blender", "lowprio scope", "2.2 G / 24 G", 0.09, CALM),
     ("T3Code", "14 procs", "1.5 G", 0.03, ACCENT),
 ]):
-    y = 452 + i * 24
+    y = 492 + i * 24
     text(28, y, n, 12.5, FG)
     text(36 + len(n) * 7.6, y, d, 12.5, DIM)
     text(DW - 28, y, r, 12.5, DIM, anchor="end")
@@ -274,16 +272,16 @@ add("</g></g>")
 
 # Storage view
 add('<g id="sview" class="a">')
-add(f'<rect x="16" y="114" width="{DW - 32}" height="398" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
+add(f'<rect x="16" y="114" width="{DW - 32}" height="{DH - 130}" rx="10" fill="{TILE}" stroke="{TILE_LINE}"/>')
 text(28, 134, "DISKS AND SHARES", 10.5, DIM, 700, spacing=1)
 y = 164
 rows = [
-    ("head", "Sabrent", "nvme0n1", "41°C"),
+    ("head", "Sabrent", "nvme0n1", "41 / 75°C"),
     ("fs", "/ +5", "btrfs", "784 G / 1.9 T · 41%", 0.41, ACCENT),
     ("fs", "/boot", "vfat", "237 M / 2.0 G · 12%", 0.12, ACCENT),
-    ("head", "Samsung SSD 990 PRO 2TB", "nvme1n1", "48°C"),
+    ("head", "Samsung SSD 990 PRO 2TB", "nvme1n1", "48 / 82°C"),
     ("fs", "~/Sites +1", "btrfs", "1.3 T / 1.8 T · 72%", 0.72, ACCENT),
-    ("head", "Samsung SSD 990 PRO 2TB", "nvme2n1", "46°C"),
+    ("head", "Samsung SSD 990 PRO 2TB", "nvme2n1", "46 / 82°C"),
     ("fs", "/scratch +1", "ext4", "322 G / 1.8 T · 18%", 0.18, ACCENT),
     ("head", "nas · media", "network share", ""),
     ("fs", "~/Media", "cifs", "4.1 T / 6.6 T · 62%", 0.62, ACCENT),
@@ -294,7 +292,7 @@ for k, r in enumerate(rows):
         y += 8 if k else 0
         text(28, y, r[1], 12.5, FG, 700)
         text(36 + len(r[1]) * 7.8, y, r[2], 12.5, DIM)
-        text(DW - 28, y, r[3], 12.5, DIM, anchor="end")
+        text(DW - 28, y, r[3], 12.5, CALM if "°C" in r[3] else DIM, anchor="end")
         y += 26
     else:
         meter_row(28, y, DW - 56, r[1], r[2], r[3], r[4], r[5], "fill", 0.05 * k)

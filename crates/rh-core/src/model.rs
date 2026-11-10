@@ -265,6 +265,10 @@ pub struct SwitchyardView {
     pub failed: Vec<String>,
     /// Task id to label.
     pub labels: Vec<(String, String)>,
+    /// Why the next heavy build is waiting, in Switchyard's words ("held:
+    /// Roundhouse says ...", "waiting for 16 G free ..."), while it is.
+    #[serde(default)]
+    pub waiting: Option<String>,
 }
 
 impl SwitchyardView {
@@ -274,5 +278,30 @@ impl SwitchyardView {
             .find(|(i, _)| i == id)
             .map(|(_, l)| l.as_str())
             .unwrap_or(id)
+    }
+
+    /// One line for the Machine tab while Switchyard is busy with heavy
+    /// work, since a build explains a busy machine. `None` while it is not.
+    pub fn status_line(&self) -> Option<String> {
+        if let Some(cur) = &self.current {
+            let rest = self.queue.iter().filter(|q| *q != cur).count();
+            let mut s = format!("Switchyard is building {}", self.label(cur));
+            if rest > 0 {
+                s.push_str(&format!(" · {rest} queued"));
+            }
+            return Some(s);
+        }
+        if let (Some(head), Some(why)) = (self.queue.first(), &self.waiting) {
+            let name = self.label(head);
+            return Some(match why.strip_prefix("held: ") {
+                Some(r) => format!("Switchyard is holding {name}: {r}"),
+                None => format!("Switchyard: {name} is {why}"),
+            });
+        }
+        if !self.building.is_empty() {
+            let names: Vec<&str> = self.building.iter().map(|b| self.label(b)).collect();
+            return Some(format!("Switchyard is building {}", names.join(", ")));
+        }
+        None
     }
 }

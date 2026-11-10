@@ -71,6 +71,13 @@ window.roundhouse * { font-family: inherit; }
 }
 .tabs button:hover { color: @rh_fg; }
 .tabs button.active { background: @rh_accent; color: @rh_well; }
+/* The Switchyard tab is a link to the sibling's board, not a page. */
+.tabs button.link { font-weight: normal; }
+.tabs button.link .arrow { color: @rh_dim; }
+.yard-dot { color: @rh_idle; font-size: 9px; }
+.yard-dot.ok { color: @rh_calm; }
+.yard-dot.queued, .yard-dot.waiting, .yard-dot.building, .yard-dot.running { color: @rh_accent; }
+.yard-dot.failed { color: @rh_act; }
 
 /* ---- verdict ---- */
 .verdict {
@@ -137,14 +144,15 @@ progressbar.meter.calm > trough > progress { background: @rh_calm; }
 progressbar.meter.heads-up > trough > progress { background: @rh_heads_up; }
 progressbar.meter.act > trough > progress { background: @rh_act; }
 
-.handoff {
+.yard-line {
   background: @rh_tile;
   border: 1px solid @rh_tile_border;
-  border-radius: 8px;
+  border-radius: 10px;
   color: @rh_fg;
-  padding: 6px 10px;
+  padding: 7px 10px;
   box-shadow: none;
+  font-weight: normal;
 }
-.handoff:hover { background: @rh_tile_hover; color: @rh_accent; }
+.yard-line:hover { background: @rh_tile_hover; color: @rh_accent; }
 
 .foot { color: @rh_dim; font-size: 10.5px; }

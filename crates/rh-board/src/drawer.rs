@@ -1,4 +1,5 @@
-//! The drawer: header with the lamp, tabs, and one page per tab.
+//! The drawer: header with the lamp, tabs, and one page per tab. The
+//! Switchyard tab is a link: it hands the same anchor to Switchyard's board.
 
 use crate::anim::{Motion, Spring};
 use crate::stage::Stage;
@@ -20,6 +21,14 @@ pub enum Msg {
     Restyle,
 }
 
+/// The tab that opens Switchyard's board instead of a page.
+const YARD: &str = "switchyard";
+
+/// Switchyard's aggregate phases, each a class on the link's dot.
+const YARD_PHASES: [&str; 7] = [
+    "idle", "queued", "waiting", "building", "running", "ok", "failed",
+];
+
 const TABS: [(&str, &str); 3] = [
     ("machine", "Machine"),
     ("storage", "Storage"),
@@ -29,6 +38,8 @@ const TABS: [(&str, &str); 3] = [
 struct MachinePage {
     root: gtk::Box,
     verdict: gtk::Box,
+    /// What Switchyard's heavy work is doing, while it is doing something.
+    yard_line: gtk::Button,
     reasons: gtk::Box,
     reasons_sig: RefCell<String>,
     cpu: Tile,
@@ -42,11 +53,6 @@ struct MachinePage {
 }
 
 struct StoragePage {
-    root: gtk::Box,
-    rows: Rows,
-}
-
-struct YardPage {
     root: gtk::Box,
     rows: Rows,
 }
@@ -71,7 +77,8 @@ pub struct Drawer {
     stack: gtk::Stack,
     machine: MachinePage,
     storage: StoragePage,
-    yard: YardPage,
+    /// The dot on the Switchyard link, colored by Switchyard's phase.
+    yard_dot: gtk::Label,
     foot: gtk::Label,
 }
 
@@ -169,6 +176,7 @@ impl Drawer {
         tabs_box.add_css_class("tabs");
         tabs_box.set_homogeneous(true);
         let mut tabs = vec![];
+        let yard_dot = label("\u{25cf}", &["yard-dot"]);
         let order: Vec<String> = cfg
             .drawer
             .tabs
@@ -182,7 +190,20 @@ impl Drawer {
                 .find(|(i, _)| i == id)
                 .map(|(_, t)| *t)
                 .unwrap_or(id);
-            let b = gtk::Button::with_label(title);
+            let b = if id == YARD {
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+                row.set_halign(gtk::Align::Center);
+                row.append(&yard_dot);
+                row.append(&label(title, &[]));
+                row.append(&label("\u{2197}", &["arrow"]));
+                let b = gtk::Button::new();
+                b.set_child(Some(&row));
+                b.add_css_class("link");
+                b.set_tooltip_text(Some("Open the Switchyard board"));
+                b
+            } else {
+                gtk::Button::with_label(title)
+            };
             b.set_focus_on_click(false);
             tabs_box.append(&b);
             tabs.push((id.clone(), b));
@@ -198,6 +219,14 @@ impl Drawer {
         let reasons = gtk::Box::new(gtk::Orientation::Vertical, 0);
         verdict.append(&reasons);
         verdict.set_visible(false);
+        let yard_line = gtk::Button::with_label("");
+        yard_line.add_css_class("yard-line");
+        if let Some(l) = yard_line.child().and_downcast::<gtk::Label>() {
+            l.set_xalign(0.0);
+            l.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        }
+        yard_line.set_tooltip_text(Some("Open the Switchyard board"));
+        yard_line.set_visible(false);
         let (cpu, gpu, mem, psi) = (
             Tile::new("CPU"),
             Tile::new("GPU"),
@@ -225,11 +254,13 @@ impl Drawer {
         apps_card.append(&apps.root);
         let mroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         mroot.append(&verdict);
+        mroot.append(&yard_line);
         mroot.append(&grid);
         mroot.append(&apps_card);
         let machine = MachinePage {
             root: mroot,
             verdict,
+            yard_line,
             reasons,
             reasons_sig: RefCell::new(String::new()),
             cpu,
@@ -253,30 +284,12 @@ impl Drawer {
             rows: srows,
         };
 
-        // ---- switchyard page
-        let yrows = Rows::new();
-        let ycard = card("SWITCHYARD", "SIBLING");
-        ycard.append(&yrows.root);
-        let handoff = gtk::Button::with_label("Open the Switchyard board");
-        handoff.add_css_class("handoff");
-        let yroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
-        yroot.append(&ycard);
-        yroot.append(&handoff);
-        let yard = YardPage {
-            root: yroot,
-            rows: yrows,
-        };
-
         let stack = gtk::Stack::new();
         stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
         stack.set_transition_duration(220);
         stack.set_vhomogeneous(false);
         stack.set_interpolate_size(true);
-        for (id, page) in [
-            ("machine", &machine.root),
-            ("storage", &storage.root),
-            ("switchyard", &yard.root),
-        ] {
+        for (id, page) in [("machine", &machine.root), ("storage", &storage.root)] {
             stack.add_named(page, Some(id));
         }
         let scroller = gtk::ScrolledWindow::new();
@@ -304,7 +317,11 @@ impl Drawer {
         );
         window.set_child(Some(&stage));
 
-        let first = order.first().cloned().unwrap_or_else(|| "machine".into());
+        let first = order
+            .iter()
+            .find(|t| *t != YARD)
+            .cloned()
+            .unwrap_or_else(|| "machine".into());
         let d = Rc::new(Drawer {
             me: RefCell::new(std::rc::Weak::new()),
             window,
@@ -324,7 +341,7 @@ impl Drawer {
             stack,
             machine,
             storage,
-            yard,
+            yard_dot,
             foot,
         });
 
@@ -350,13 +367,10 @@ impl Drawer {
         }
         {
             let w = Rc::downgrade(&d);
-            handoff.connect_clicked(move |_| {
-                let Some(d) = w.upgrade() else { return };
-                let anchor = d.anchor.borrow().clone();
-                d.hide();
-                std::thread::spawn(move || {
-                    rh_core::sibling::switchyard_show(anchor.as_ref());
-                });
+            d.machine.yard_line.connect_clicked(move |_| {
+                if let Some(d) = w.upgrade() {
+                    d.handoff();
+                }
             });
         }
         {
@@ -423,6 +437,9 @@ impl Drawer {
             gdk::Key::ISO_Left_Tab | gdk::Key::Left | gdk::Key::h => -1,
             _ => return glib::Propagation::Proceed,
         };
+        // Cycling stays on this drawer's own pages; the link is a number
+        // key or a click away.
+        let visible: Vec<String> = visible.into_iter().filter(|t| t != YARD).collect();
         let cur = visible
             .iter()
             .position(|t| *t == *self.tab.borrow())
@@ -451,12 +468,38 @@ impl Drawer {
         if !self.tabs.iter().any(|(t, b)| t == id && b.is_visible()) {
             return;
         }
+        if id == YARD {
+            self.handoff();
+            return;
+        }
         *self.tab.borrow_mut() = id.to_string();
         self.select_quiet();
         self.render();
     }
 
+    /// Closes the drawer and opens Switchyard's board from the same anchor.
+    fn handoff(self: &Rc<Self>) {
+        let anchor = self.anchor.borrow().clone();
+        self.hide();
+        std::thread::spawn(move || {
+            rh_core::sibling::switchyard_show(anchor.as_ref());
+        });
+    }
+
     fn show(self: &Rc<Self>, anchor: Option<Anchor>, tab: Option<String>) {
+        // `--tab switchyard` goes straight to the board while it runs.
+        if tab.as_deref() == Some(YARD) {
+            let yard_on = self
+                .snap
+                .borrow()
+                .as_ref()
+                .is_some_and(|s| s.siblings.switchyard.is_some());
+            if yard_on {
+                *self.anchor.borrow_mut() = anchor;
+                self.handoff();
+                return;
+            }
+        }
         if let Some(name) = anchor.as_ref().and_then(|a| a.monitor.clone()) {
             if let Some(m) = find_monitor(&name) {
                 self.window.set_monitor(Some(&m));
@@ -541,21 +584,25 @@ impl Drawer {
             None => self.notice.set_visible(false),
         }
 
-        // Sibling tabs come and go with their sibling.
-        let yard_on = s.siblings.switchyard.is_some();
+        // The Switchyard link comes and goes with Switchyard, its dot
+        // colored by what Switchyard is doing.
+        let yard = s.siblings.switchyard.as_ref();
         for (id, b) in &self.tabs {
-            if id == "switchyard" {
-                b.set_visible(yard_on);
+            if id == YARD {
+                b.set_visible(yard.is_some());
             }
         }
-        if !yard_on && *self.tab.borrow() == "switchyard" {
-            *self.tab.borrow_mut() = "machine".into();
-            self.select_quiet();
+        for c in YARD_PHASES {
+            self.yard_dot.remove_css_class(c);
+        }
+        if let Some(y) = yard {
+            if YARD_PHASES.contains(&y.phase.as_str()) {
+                self.yard_dot.add_css_class(&y.phase);
+            }
         }
 
         self.render_machine(s, &cfg);
         self.render_storage(s, &cfg);
-        self.render_yard(s);
         let n_tabs = self.tabs.iter().filter(|(_, b)| b.is_visible()).count();
         self.foot
             .set_label(&format!("1-{n_tabs} tabs · Esc close · {}", s.host.os));
@@ -601,6 +648,15 @@ impl Drawer {
             p.verdict.add_css_class(s.lamp.level.as_str());
         }
         p.verdict.set_visible(!s.lamp.reasons.is_empty());
+
+        // A heavy build explains a busy machine; one click opens the board.
+        let line = s.siblings.switchyard.as_ref().and_then(|y| y.status_line());
+        p.yard_line.set_visible(line.is_some());
+        if let Some(text) = line {
+            if p.yard_line.label().as_deref() != Some(text.as_str()) {
+                p.yard_line.set_label(&text);
+            }
+        }
 
         p.cpu
             .title
@@ -776,69 +832,5 @@ impl Drawer {
             }
         }
         self.storage.rows.set(&rows);
-    }
-
-    fn render_yard(&self, s: &Snapshot) {
-        let Some(y) = &s.siblings.switchyard else {
-            self.yard.rows.set(&[]);
-            return;
-        };
-        let names = |ids: &[String]| {
-            ids.iter()
-                .map(|i| y.label(i).to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        let mut rows = vec![RowData {
-            name: "Main line".into(),
-            detail: if y.waiting_memory {
-                "waiting for free memory".into()
-            } else {
-                String::new()
-            },
-            right: y
-                .current
-                .as_deref()
-                .map(|c| format!("building {}", y.label(c)))
-                .unwrap_or_else(|| "free".into()),
-            right_class: if y.waiting_memory { "heads-up" } else { "" },
-            ..Default::default()
-        }];
-        if !y.queue.is_empty() {
-            rows.push(RowData {
-                name: "Queued".into(),
-                right: names(&y.queue),
-                ..Default::default()
-            });
-        }
-        if !y.building.is_empty() {
-            rows.push(RowData {
-                name: "Building".into(),
-                right: names(&y.building),
-                ..Default::default()
-            });
-        }
-        if !y.running.is_empty() {
-            rows.push(RowData {
-                name: "Running".into(),
-                right: names(&y.running),
-                ..Default::default()
-            });
-        }
-        if !y.failed.is_empty() {
-            rows.push(RowData {
-                name: "Failed".into(),
-                right: names(&y.failed),
-                right_class: "act",
-                ..Default::default()
-            });
-        }
-        rows.push(RowData {
-            name: "Tasks".into(),
-            detail: y.phase.clone(),
-            right: y.tasks.to_string(),
-            ..Default::default()
-        });
-        self.yard.rows.set(&rows);
     }
 }

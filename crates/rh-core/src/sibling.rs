@@ -49,6 +49,18 @@ pub fn parse_switchyard(reply: &str) -> Option<SwitchyardView> {
         .collect();
     let agg = snap.get("aggregate");
     let ml = snap.get("mainline");
+    let queue = strings(ml.and_then(|m| m.get("queue")));
+    // The queue's head waits with a message saying why (memory, or a hold
+    // while this lamp says act).
+    let waiting = queue.iter().find_map(|id| {
+        let t = tasks
+            .iter()
+            .find(|t| t.get("id").and_then(Value::as_str) == Some(id))?;
+        if t.get("phase").and_then(Value::as_str) != Some("waiting") {
+            return None;
+        }
+        t.get("message").and_then(Value::as_str).map(String::from)
+    });
     Some(SwitchyardView {
         phase: agg
             .and_then(|a| a.get("phase"))
@@ -60,7 +72,7 @@ pub fn parse_switchyard(reply: &str) -> Option<SwitchyardView> {
             .and_then(|m| m.get("current"))
             .and_then(Value::as_str)
             .map(String::from),
-        queue: strings(ml.and_then(|m| m.get("queue"))),
+        queue,
         waiting_memory: ml
             .and_then(|m| m.get("waiting_memory"))
             .and_then(Value::as_bool)
@@ -69,6 +81,7 @@ pub fn parse_switchyard(reply: &str) -> Option<SwitchyardView> {
         running: strings(agg.and_then(|a| a.get("running"))),
         failed: strings(agg.and_then(|a| a.get("failed"))),
         labels,
+        waiting,
     })
 }
 
@@ -130,6 +143,32 @@ mod tests {
         assert!(v.waiting_memory);
         assert_eq!(v.label("launchpad"), "LaunchPad");
         assert_eq!(v.label("plos-deploy"), "plos-deploy");
+    }
+
+    #[test]
+    fn says_why_a_build_waits() {
+        let reply = r#"{"ok":true,"snapshot":{
+          "tasks":[{"id":"android","label":"android","phase":"waiting","message":"held: Roundhouse says CPU is at 96°C (limit 95°C)"},
+                   {"id":"ledger-api","label":"ledger api","phase":"queued","message":null}],
+          "mainline":{"current":null,"queue":["android","ledger-api"],"waiting_memory":false},
+          "aggregate":{"phase":"queued","failed":[],"building":[],"queued":["android","ledger-api"],"running":[],"ok":[]},
+          "now":1.0}}"#;
+        let v = parse_switchyard(reply).unwrap();
+        assert_eq!(
+            v.status_line().as_deref(),
+            Some("Switchyard is holding android: Roundhouse says CPU is at 96°C (limit 95°C)")
+        );
+        let building = parse_switchyard(
+            r#"{"ok":true,"snapshot":{"tasks":[{"id":"storefront","label":"storefront","phase":"building"}],
+              "mainline":{"current":"storefront","queue":["android"]},"aggregate":{"phase":"building","building":["storefront"]}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            building.status_line().as_deref(),
+            Some("Switchyard is building storefront · 1 queued")
+        );
+        let idle = parse_switchyard(r#"{"ok":true,"snapshot":{"mainline":{"queue":[]}}}"#).unwrap();
+        assert_eq!(idle.status_line(), None);
     }
 
     #[test]
