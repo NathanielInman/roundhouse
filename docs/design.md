@@ -186,10 +186,17 @@ What Roundhouse uses from Switchyard today:
 | `{"cmd":"snapshot"}` | The Switchyard tab: `aggregate.phase`, `aggregate.building`, `aggregate.running`, `aggregate.failed`, `mainline.current`, `mainline.queue`, `mainline.waiting_memory`, `tasks[].id` and `tasks[].label`. |
 | `{"cmd":"show","anchor":{...}}` | The handoff button. |
 
-What Switchyard can use from Roundhouse (`{"cmd":"snapshot"}` on
-`rh.sock`): `machine.pressure.memory` to hold the main line on memory
-pressure rather than free memory alone, `lamp` to show the machine's state on
-its board, and `{"cmd":"show","anchor":{...}}` to hand off the other way.
+What Switchyard uses from Roundhouse:
+
+| Request | Used for |
+|---|---|
+| `{"cmd":"snapshot"}` on `rh.sock` | `lamp.level` and `lamp.reasons[].level`/`text`. While the lamp is at `act`, Switchyard holds the next heavy build with the reason as its message and starts it on the first calm answer (`mainline.respect_roundhouse` in Switchyard's config). |
+
+Not used yet: `{"cmd":"show","anchor":{...}}` for a handoff from
+Switchyard's board to this drawer.
+
+The `lamp` shape (`level`, and `reasons` with `level`, `text` and `tab`) is
+part of the sibling contract: change it only by adding fields.
 
 ## Protocol
 

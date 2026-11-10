@@ -63,6 +63,10 @@ waits.
 - With Switchyard running, Roundhouse gains the Switchyard tab, Switchyard's
   build in its bar tooltip, and a handoff button that opens the Switchyard
   board from the same icon.
+- With Roundhouse running, Switchyard holds the next heavy build while the
+  lamp says act (memory stalling, a filesystem past 95%, a CPU or GPU at its
+  limit), and the waiting tile says why. It starts on its own once the lamp
+  calms down.
 - The sibling contract is plain JSON lines over each daemon's socket, read
   loosely, so the two can be upgraded separately. It is written down in
   [docs/design.md](docs/design.md#siblings).
