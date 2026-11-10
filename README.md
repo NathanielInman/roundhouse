@@ -1,6 +1,10 @@
 <h1 align="center">Roundhouse</h1>
 
 <p align="center">
+  <img src="docs/assets/hero.svg" width="100%" alt="A waybar with one lamp icon. A click on it opens the Roundhouse drawer out of the icon: CPU, GPU, memory, pressure and network tiles with sparklines, memory by app, then the Storage tab with disks and a network share.">
+</p>
+
+<p align="center">
   <b>One lamp in your bar. Click it and the whole machine slides out of that icon.</b><br>
   CPU, GPU and memory pressure, every disk and network share, memory by app,<br>
   and your build queue when Switchyard is running. Styled from your own waybar.

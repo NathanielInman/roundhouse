@@ -1,0 +1,265 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" font-family="JetBrains Mono, DejaVu Sans Mono, Menlo, Consolas, monospace" role="img" aria-label="A waybar with one lamp icon. A click on it opens the Roundhouse drawer out of the icon: CPU, GPU, memory, pressure and network tiles with sparklines, memory by app, then the Storage tab with disks and a network share.">
+<style>
+.a { animation-duration: 12s; animation-iteration-count: infinite; animation-timing-function: linear; animation-fill-mode: both; }
+#drawer { transform-origin: 1006px 638.0px; animation-name: spring; }
+@keyframes spring {
+  0%, 8.99% { transform: translateY(26px) scale(.06); opacity: 0; }
+  9.83% { transform: translateY(14px) scale(.5); opacity: .85; }
+  10.67% { transform: translateY(4px) scale(.9); opacity: 1; }
+  11.50% { transform: translateY(-1px) scale(1.035); }
+  12.50% { transform: translateY(0) scale(.988); }
+  13.67% { transform: scale(1.006); }
+  15.00%, 78.17% { transform: scale(1); opacity: 1; }
+  81.25%, 100% { transform: translateY(14px) scale(.4); opacity: 0; }
+}
+.rise { animation-name: rise; animation-timing-function: cubic-bezier(.2,.8,.2,1); }
+@keyframes rise {
+  0%, 10.00% { opacity: 0; transform: translateY(12px); }
+  13.33%, 100% { opacity: 1; transform: none; }
+}
+.fade { animation-name: fade; }
+@keyframes fade { 0%, 13.17% { opacity: 0; } 18.17%, 100% { opacity: 1; } }
+.draw { animation-name: draw; animation-timing-function: ease-out; }
+@keyframes draw { 0%, 11.08% { stroke-dashoffset: var(--len); } 22.33%, 100% { stroke-dashoffset: 0; } }
+#mview { animation-name: mout; }
+@keyframes mout {
+  0%, 47.08% { opacity: 1; transform: none; }
+  49.17%, 100% { opacity: 0; transform: translateX(-36px); }
+}
+#sview { opacity: 0; animation-name: sin; }
+@keyframes sin {
+  0%, 47.67% { opacity: 0; transform: translateX(36px); }
+  50.17%, 100% { opacity: 1; transform: none; }
+}
+.fill { transform-box: fill-box; transform-origin: left center; animation-name: fill; animation-timing-function: cubic-bezier(.2,.8,.2,1); }
+@keyframes fill { 0%, 49.58% { transform: scaleX(0); } 57.50%, 100% { transform: scaleX(1); } }
+#pill { animation-name: pill; animation-timing-function: cubic-bezier(.3,1.3,.5,1); }
+@keyframes pill { 0%, 47.08% { transform: none; } 49.58%, 100% { transform: translateX(161px); } }
+#tab1 { animation-name: t1; }
+@keyframes t1 { 0%, 47.50% { fill: #1d2024; } 48.33%, 100% { fill: #7c838e; } }
+#tab2 { fill: #7c838e; animation-name: t2; }
+@keyframes t2 { 0%, 47.92% { fill: #7c838e; } 49.17%, 100% { fill: #1d2024; } }
+#lampbg { animation-name: lampbg; }
+@keyframes lampbg { 0%, 8.75% { opacity: 0; } 10.00%, 78.33% { opacity: 1; } 81.25%, 100% { opacity: 0; } }
+#cursor { animation-name: cursor; animation-timing-function: cubic-bezier(.45,0,.25,1); }
+@keyframes cursor {
+  0% { transform: translate(760px, 380px); }
+  7.08%, 38.33% { transform: translate(1003px, 634.0px); }
+  45.42%, 69.17% { transform: translate(922px, 158px); }
+  76.25%, 86.67% { transform: translate(470px, 300px); }
+  100% { transform: translate(760px, 380px); }
+}
+.ripple { transform-box: fill-box; transform-origin: center; animation-name: var(--k); }
+@keyframes r0 { 0%, 8.32% { opacity: 0; transform: scale(.3); } 8.33% { opacity: .9; transform: scale(.3); } 12.08%, 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes r1 { 0%, 46.66% { opacity: 0; transform: scale(.3); } 46.67% { opacity: .9; transform: scale(.3); } 50.42%, 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes r2 { 0%, 77.49% { opacity: 0; transform: scale(.3); } 77.50% { opacity: .9; transform: scale(.3); } 81.25%, 100% { opacity: 0; transform: scale(1.6); } }
+
+.pulse { transform-box: fill-box; transform-origin: center; animation: pulse 2.4s ease-out infinite; }
+@keyframes pulse { 0% { opacity: .55; transform: scale(.6); } 80%, 100% { opacity: 0; transform: scale(1.9); } }
+@media (prefers-reduced-motion: reduce) {
+  .a, .pulse, .ripple { animation: none !important; }
+  #cursor, .ripple { display: none; }
+}
+</style>
+<defs>
+<linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14171c"/><stop offset="1" stop-color="#0d0f12"/></linearGradient>
+<radialGradient id="haze1" cx=".85" cy="0" r=".75"><stop offset="0" stop-color="#88c0d0" stop-opacity=".13"/><stop offset="1" stop-color="#88c0d0" stop-opacity="0"/></radialGradient>
+<radialGradient id="haze2" cx=".05" cy="1" r=".6"><stop offset="0" stop-color="#b48ead" stop-opacity=".09"/><stop offset="1" stop-color="#b48ead" stop-opacity="0"/></radialGradient>
+<filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".65"/></filter>
+<clipPath id="screen"><rect width="1200" height="660" rx="18"/></clipPath>
+</defs>
+<g clip-path="url(#screen)">
+<rect width="1200" height="660" fill="url(#wall)"/><rect width="1200" height="660" fill="url(#haze1)"/><rect width="1200" height="660" fill="url(#haze2)"/>
+<rect x="36" y="36" width="560" height="360" rx="12" fill="#1a1d22" stroke="#2a2e35"/>
+<rect x="36" y="36" width="560" height="30" rx="12" fill="#1f2328"/>
+<circle cx="54" cy="51" r="5" fill="#bf616a" fill-opacity=".55"/>
+<circle cx="70" cy="51" r="5" fill="#ebcb8b" fill-opacity=".55"/>
+<circle cx="86" cy="51" r="5" fill="#a3be8c" fill-opacity=".55"/>
+<rect x="58" y="86" width="305" height="9" rx="4" fill="#5e81ac55"/>
+<rect x="58" y="110" width="164" height="9" rx="4" fill="#88c0d044"/>
+<rect x="82" y="134" width="164" height="9" rx="4" fill="#88c0d044"/>
+<rect x="58" y="158" width="169" height="9" rx="4" fill="#3b4252"/>
+<rect x="106" y="182" width="136" height="9" rx="4" fill="#5e81ac55"/>
+<rect x="58" y="206" width="175" height="9" rx="4" fill="#3b4252"/>
+<rect x="106" y="230" width="374" height="9" rx="4" fill="#3b4252"/>
+<rect x="58" y="254" width="429" height="9" rx="4" fill="#434c5e"/>
+<rect x="58" y="278" width="438" height="9" rx="4" fill="#88c0d044"/>
+<rect x="106" y="302" width="391" height="9" rx="4" fill="#3b4252"/>
+<rect x="58" y="326" width="253" height="9" rx="4" fill="#88c0d044"/>
+<rect x="210" y="300" width="470" height="280" rx="12" fill="#1a1d22" stroke="#2a2e35"/>
+<rect x="210" y="300" width="470" height="30" rx="12" fill="#1f2328"/>
+<circle cx="228" cy="315" r="5" fill="#bf616a" fill-opacity=".55"/>
+<circle cx="244" cy="315" r="5" fill="#ebcb8b" fill-opacity=".55"/>
+<circle cx="260" cy="315" r="5" fill="#a3be8c" fill-opacity=".55"/>
+<rect x="256" y="350" width="161" height="9" rx="4" fill="#5e81ac55"/>
+<rect x="232" y="374" width="190" height="9" rx="4" fill="#88c0d044"/>
+<rect x="232" y="398" width="274" height="9" rx="4" fill="#3b4252"/>
+<rect x="256" y="422" width="189" height="9" rx="4" fill="#3b4252"/>
+<rect x="232" y="446" width="149" height="9" rx="4" fill="#88c0d044"/>
+<rect x="280" y="470" width="174" height="9" rx="4" fill="#88c0d044"/>
+<rect x="256" y="494" width="311" height="9" rx="4" fill="#5e81ac55"/>
+<rect x="0" y="616" width="1200" height="44" fill="#282a2e"/>
+<line x1="0" y1="616" x2="1200" y2="616" stroke="#000" stroke-opacity=".4"/>
+<text x="27" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="middle">1</text>
+<text x="57" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="middle">2</text>
+<text x="87" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="middle">3</text>
+<rect x="104" y="625" width="26" height="26" rx="6" fill="#88c0d0"/>
+<text x="117" y="643.0" font-size="14" fill="#1d2024" font-weight="700" text-anchor="middle">4</text>
+<text x="147" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="middle">5</text>
+<text x="177" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="middle">6</text>
+<text x="208" y="643.0" font-size="14" fill="#c5c8c6" font-weight="400" text-anchor="start">nvim  crates/rh-board/src/drawer.rs</text>
+<text x="612" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="start">♪ lo-fi radio</text>
+<line x1="598" y1="626" x2="598" y2="650" stroke="#3b4048"/>
+<text x="760" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="start">vol 42%</text>
+<line x1="746" y1="626" x2="746" y2="650" stroke="#3b4048"/>
+<text x="858" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="start">mouse 81%</text>
+<line x1="844" y1="626" x2="844" y2="650" stroke="#3b4048"/>
+<line x1="976" y1="626" x2="976" y2="650" stroke="#3b4048"/>
+<rect id="lampbg" class="a" x="984" y="623" width="74" height="30" rx="7" fill="#88c0d0" fill-opacity=".22"/>
+<circle class="pulse" cx="1006" cy="638.0" r="13" fill="none" stroke="#a3be8c" stroke-width="2"/>
+<circle cx="1006" cy="638.0" r="11" fill="none" stroke="#c5c8c6" stroke-width="1.6"/>
+<line x1="1013.0" y1="638.0" x2="1016.0" y2="638.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1010.9" y1="642.9" x2="1013.1" y2="645.1" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1006.0" y1="645.0" x2="1006.0" y2="648.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1001.1" y1="642.9" x2="998.9" y2="645.1" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="999.0" y1="638.0" x2="996.0" y2="638.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1001.1" y1="633.1" x2="998.9" y2="630.9" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1006.0" y1="631.0" x2="1006.0" y2="628.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<line x1="1010.9" y1="633.1" x2="1013.1" y2="630.9" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
+<circle cx="1006" cy="638.0" r="4.0" fill="#a3be8c"/>
+<text x="1024" y="643.0" font-size="14" fill="#c5c8c6" font-weight="400" text-anchor="start">54°</text>
+<line x1="1068" y1="626" x2="1068" y2="650" stroke="#3b4048"/>
+<text x="1178" y="643.0" font-size="14" fill="#c5c8c6" font-weight="400" text-anchor="end">14:32</text>
+<g id="drawer" class="a"><g transform="translate(662,76)">
+<rect width="520" height="528" rx="16" fill="#25282c" stroke="#41464e" filter="url(#shadow)"/>
+<circle cx="24" cy="30" r="5" fill="#a3be8c"/>
+<text x="40" y="34" font-size="15" fill="#c5c8c6" font-weight="700" text-anchor="start" letter-spacing="1.5">FROSTYARCH</text>
+<text x="40" y="53" font-size="12" fill="#7c838e" font-weight="400" text-anchor="start">up 15h 11m · linux 7.2.14</text>
+<rect x="438" y="20" width="64" height="24" rx="12" fill="#a3be8c" fill-opacity=".14"/>
+<text x="470" y="36" font-size="12" fill="#a3be8c" font-weight="700" text-anchor="middle">calm</text>
+<rect x="16" y="68" width="488" height="34" rx="9" fill="#2c2f34"/>
+<rect id="pill" class="a" x="19" y="71" width="160" height="28" rx="7" fill="#88c0d0"/>
+<text x="99" y="90" font-size="13" fill="#1d2024" font-weight="700" text-anchor="middle" class="a" id="tab1">Machine</text>
+<text x="260" y="90" font-size="13" fill="#7c838e" font-weight="700" text-anchor="middle" class="a" id="tab2">Storage</text>
+<text x="421" y="90" font-size="13" fill="#7c838e" font-weight="700" text-anchor="middle">Switchyard</text>
+<g id="mview" class="a">
+<g class="a rise" style="animation-delay:0.0s">
+<rect x="16" y="114" width="240.0" height="92" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="28" y="134" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">CPU · RYZEN 7 9800X3D</text>
+<text x="244.0" y="134" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">54°C</text>
+<text x="28" y="164" font-size="25" fill="#c5c8c6" font-weight="700" text-anchor="start">12</text>
+<text x="61.0" y="164" font-size="11.5" fill="#7c838e" font-weight="400" text-anchor="start">% · 4.7 GHz</text>
+<path d="M28,198 L28.0,190.3 L33.5,190.6 L39.1,191.8 L44.6,190.0 L50.2,189.0 L55.7,190.6 L61.2,190.2 L66.8,190.2 L72.3,188.1 L77.8,187.2 L83.4,188.8 L88.9,186.4 L94.5,189.0 L100.0,189.7 L105.5,188.4 L111.1,190.6 L116.6,190.7 L122.2,193.3 L127.7,192.1 L133.2,190.4 L138.8,190.1 L144.3,188.0 L149.8,189.4 L155.4,188.5 L160.9,188.2 L166.5,188.1 L172.0,188.7 L177.5,187.0 L183.1,185.0 L188.6,185.8 L194.2,185.5 L199.7,188.6 L205.2,187.7 L210.8,187.3 L216.3,184.9 L221.8,183.8 L227.4,185.9 L232.9,187.1 L238.5,186.6 L244.0,189.8 L244.0,198 Z" fill="#88c0d0" fill-opacity=".14" class="a fade" style="animation-delay:0.15s"/>
+<polyline points="28.0,190.3 33.5,190.6 39.1,191.8 44.6,190.0 50.2,189.0 55.7,190.6 61.2,190.2 66.8,190.2 72.3,188.1 77.8,187.2 83.4,188.8 88.9,186.4 94.5,189.0 100.0,189.7 105.5,188.4 111.1,190.6 116.6,190.7 122.2,193.3 127.7,192.1 133.2,190.4 138.8,190.1 144.3,188.0 149.8,189.4 155.4,188.5 160.9,188.2 166.5,188.1 172.0,188.7 177.5,187.0 183.1,185.0 188.6,185.8 194.2,185.5 199.7,188.6 205.2,187.7 210.8,187.3 216.3,184.9 221.8,183.8 227.4,185.9 232.9,187.1 238.5,186.6 244.0,189.8" fill="none" stroke="#88c0d0" stroke-width="1.6" stroke-linejoin="round" class="a draw" style="stroke-dasharray:234;stroke-dashoffset:0;--len:234;animation-delay:0.15s"/>
+<circle cx="243.0" cy="189.8" r="2.6" fill="#88c0d0" class="a fade" style="animation-delay:0.65s"/>
+</g>
+<g class="a rise" style="animation-delay:0.06s">
+<rect x="264.0" y="114" width="240.0" height="92" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="276.0" y="134" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">GPU · RTX 3080</text>
+<text x="492.0" y="134" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">41°C</text>
+<text x="276.0" y="164" font-size="25" fill="#c5c8c6" font-weight="700" text-anchor="start">8</text>
+<text x="293.5" y="164" font-size="11.5" fill="#7c838e" font-weight="400" text-anchor="start">% · 2.1 G / 10 G</text>
+<path d="M276.0,198 L276.0,194.2 L281.5,195.5 L287.1,196.8 L292.6,197.2 L298.2,195.7 L303.7,197.0 L309.2,197.2 L314.8,197.2 L320.3,195.3 L325.8,196.8 L331.4,196.7 L336.9,196.2 L342.5,194.4 L348.0,193.1 L353.5,191.7 L359.1,192.9 L364.6,193.4 L370.2,194.0 L375.7,192.5 L381.2,190.8 L386.8,192.6 L392.3,194.1 L397.8,195.1 L403.4,196.1 L408.9,195.9 L414.5,195.3 L420.0,196.1 L425.5,197.2 L431.1,197.1 L436.6,197.2 L442.2,196.6 L447.7,194.4 L453.2,193.6 L458.8,193.6 L464.3,193.2 L469.8,192.6 L475.4,194.5 L480.9,192.9 L486.5,191.9 L492.0,190.6 L492.0,198 Z" fill="#88c0d0" fill-opacity=".14" class="a fade" style="animation-delay:0.21s"/>
+<polyline points="276.0,194.2 281.5,195.5 287.1,196.8 292.6,197.2 298.2,195.7 303.7,197.0 309.2,197.2 314.8,197.2 320.3,195.3 325.8,196.8 331.4,196.7 336.9,196.2 342.5,194.4 348.0,193.1 353.5,191.7 359.1,192.9 364.6,193.4 370.2,194.0 375.7,192.5 381.2,190.8 386.8,192.6 392.3,194.1 397.8,195.1 403.4,196.1 408.9,195.9 414.5,195.3 420.0,196.1 425.5,197.2 431.1,197.1 436.6,197.2 442.2,196.6 447.7,194.4 453.2,193.6 458.8,193.6 464.3,193.2 469.8,192.6 475.4,194.5 480.9,192.9 486.5,191.9 492.0,190.6" fill="none" stroke="#88c0d0" stroke-width="1.6" stroke-linejoin="round" class="a draw" style="stroke-dasharray:231;stroke-dashoffset:0;--len:231;animation-delay:0.21s"/>
+<circle cx="491.0" cy="190.6" r="2.6" fill="#88c0d0" class="a fade" style="animation-delay:0.71s"/>
+</g>
+<g class="a rise" style="animation-delay:0.12s">
+<rect x="16" y="214" width="240.0" height="92" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="28" y="234" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">MEMORY</text>
+<text x="244.0" y="234" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">SWAP 0 B</text>
+<text x="28" y="264" font-size="25" fill="#c5c8c6" font-weight="700" text-anchor="start">13G</text>
+<text x="76.5" y="264" font-size="11.5" fill="#7c838e" font-weight="400" text-anchor="start">/ 60 G</text>
+<path d="M28,298 L28.0,289.0 L33.5,289.1 L39.1,289.2 L44.6,289.5 L50.2,289.3 L55.7,289.5 L61.2,289.7 L66.8,289.7 L72.3,289.8 L77.8,289.7 L83.4,289.8 L88.9,289.9 L94.5,289.9 L100.0,289.9 L105.5,289.8 L111.1,289.9 L116.6,289.5 L122.2,289.3 L127.7,289.5 L133.2,289.6 L138.8,289.5 L144.3,289.5 L149.8,289.7 L155.4,289.3 L160.9,289.0 L166.5,289.1 L172.0,289.1 L177.5,289.4 L183.1,289.6 L188.6,289.6 L194.2,289.6 L199.7,289.3 L205.2,289.5 L210.8,289.7 L216.3,289.3 L221.8,289.2 L227.4,289.4 L232.9,289.3 L238.5,289.6 L244.0,289.4 L244.0,298 Z" fill="#88c0d0" fill-opacity=".14" class="a fade" style="animation-delay:0.27s"/>
+<polyline points="28.0,289.0 33.5,289.1 39.1,289.2 44.6,289.5 50.2,289.3 55.7,289.5 61.2,289.7 66.8,289.7 72.3,289.8 77.8,289.7 83.4,289.8 88.9,289.9 94.5,289.9 100.0,289.9 105.5,289.8 111.1,289.9 116.6,289.5 122.2,289.3 127.7,289.5 133.2,289.6 138.8,289.5 144.3,289.5 149.8,289.7 155.4,289.3 160.9,289.0 166.5,289.1 172.0,289.1 177.5,289.4 183.1,289.6 188.6,289.6 194.2,289.6 199.7,289.3 205.2,289.5 210.8,289.7 216.3,289.3 221.8,289.2 227.4,289.4 232.9,289.3 238.5,289.6 244.0,289.4" fill="none" stroke="#88c0d0" stroke-width="1.6" stroke-linejoin="round" class="a draw" style="stroke-dasharray:226;stroke-dashoffset:0;--len:226;animation-delay:0.27s"/>
+<circle cx="243.0" cy="289.4" r="2.6" fill="#88c0d0" class="a fade" style="animation-delay:0.77s"/>
+</g>
+<g class="a rise" style="animation-delay:0.18s">
+<rect x="264.0" y="214" width="240.0" height="92" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="276.0" y="234" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">PRESSURE</text>
+<text x="492.0" y="234" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">SOME · 10 S</text>
+<text x="276.0" y="264" font-size="25" fill="#c5c8c6" font-weight="700" text-anchor="start">0.0</text>
+<text x="324.5" y="264" font-size="11.5" fill="#7c838e" font-weight="400" text-anchor="start">mem · cpu 1.8 · io 0.3</text>
+<text x="276.0" y="288" font-size="11.5" fill="#a3be8c" font-weight="400" text-anchor="start">nothing is waiting</text>
+</g>
+<g class="a rise" style="animation-delay:0.24s">
+<rect x="16" y="314" width="488" height="86" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="28" y="334" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">NETWORK · ENO1</text>
+<text x="492" y="334" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">203.0.113.42</text>
+<text x="28" y="364" font-size="25" fill="#c5c8c6" font-weight="700" text-anchor="start">↓ 1.2 MB/s</text>
+<text x="185.0" y="364" font-size="11.5" fill="#7c838e" font-weight="400" text-anchor="start">↑ 84 kB/s</text>
+<path d="M28,392 L28.0,384.4 L35.9,382.8 L43.7,382.2 L51.6,383.7 L59.5,384.5 L67.3,386.3 L75.2,385.0 L83.1,385.0 L90.9,383.8 L98.8,384.8 L106.6,386.3 L114.5,384.8 L122.4,382.7 L130.2,381.4 L138.1,380.4 L146.0,379.4 L153.8,378.8 L161.7,380.7 L169.6,381.1 L177.4,382.2 L185.3,384.8 L193.2,387.1 L201.0,388.1 L208.9,389.1 L216.7,388.0 L224.6,385.8 L232.5,386.1 L240.3,384.1 L248.2,382.0 L256.1,380.2 L263.9,381.4 L271.8,383.1 L279.7,384.7 L287.5,386.2 L295.4,387.7 L303.3,387.0 L311.1,385.1 L319.0,383.6 L326.8,383.9 L334.7,383.4 L342.6,382.3 L350.4,384.6 L358.3,384.0 L366.2,382.3 L374.0,381.3 L381.9,380.6 L389.8,381.1 L397.6,383.1 L405.5,382.0 L413.4,383.2 L421.2,382.0 L429.1,380.2 L436.9,381.2 L444.8,382.1 L452.7,380.4 L460.5,379.8 L468.4,381.9 L476.3,384.0 L484.1,385.9 L492.0,384.0 L492,392 Z" fill="#88c0d0" fill-opacity=".14" class="a fade" style="animation-delay:0.39s"/>
+<polyline points="28.0,384.4 35.9,382.8 43.7,382.2 51.6,383.7 59.5,384.5 67.3,386.3 75.2,385.0 83.1,385.0 90.9,383.8 98.8,384.8 106.6,386.3 114.5,384.8 122.4,382.7 130.2,381.4 138.1,380.4 146.0,379.4 153.8,378.8 161.7,380.7 169.6,381.1 177.4,382.2 185.3,384.8 193.2,387.1 201.0,388.1 208.9,389.1 216.7,388.0 224.6,385.8 232.5,386.1 240.3,384.1 248.2,382.0 256.1,380.2 263.9,381.4 271.8,383.1 279.7,384.7 287.5,386.2 295.4,387.7 303.3,387.0 311.1,385.1 319.0,383.6 326.8,383.9 334.7,383.4 342.6,382.3 350.4,384.6 358.3,384.0 366.2,382.3 374.0,381.3 381.9,380.6 389.8,381.1 397.6,383.1 405.5,382.0 413.4,383.2 421.2,382.0 429.1,380.2 436.9,381.2 444.8,382.1 452.7,380.4 460.5,379.8 468.4,381.9 476.3,384.0 484.1,385.9 492.0,384.0" fill="none" stroke="#88c0d0" stroke-width="1.6" stroke-linejoin="round" class="a draw" style="stroke-dasharray:482;stroke-dashoffset:0;--len:482;animation-delay:0.39s"/>
+<circle cx="491.0" cy="384.0" r="2.6" fill="#88c0d0" class="a fade" style="animation-delay:0.89s"/>
+</g>
+<g class="a rise" style="animation-delay:.3s">
+<rect x="16" y="408" width="488" height="104" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="28" y="428" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">MEMORY BY APP</text>
+<text x="492" y="428" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="end" letter-spacing="1">NOT BY PID</text>
+<text x="28" y="452" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">Chrome</text>
+<text x="81.6" y="452" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">40 procs</text>
+<text x="492" y="452" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">7.6 G</text>
+<rect x="28" y="458" width="464" height="3" rx="1.5" fill="#363a40"/>
+<rect x="28" y="458" width="60.3" height="3" rx="1.5" fill="#88c0d0"/>
+<text x="28" y="476" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">Blender</text>
+<text x="89.19999999999999" y="476" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">lowprio scope</text>
+<text x="492" y="476" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">2.2 G / 24 G</text>
+<rect x="28" y="482" width="464" height="3" rx="1.5" fill="#363a40"/>
+<rect x="28" y="482" width="41.8" height="3" rx="1.5" fill="#a3be8c"/>
+<text x="28" y="500" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">T3Code</text>
+<text x="81.6" y="500" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">14 procs</text>
+<text x="492" y="500" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">1.5 G</text>
+<rect x="28" y="506" width="464" height="3" rx="1.5" fill="#363a40"/>
+<rect x="28" y="506" width="13.9" height="3" rx="1.5" fill="#88c0d0"/>
+</g></g>
+<g id="sview" class="a">
+<rect x="16" y="114" width="488" height="398" rx="10" fill="#2c2f34" stroke="#363a40"/>
+<text x="28" y="134" font-size="10.5" fill="#7c838e" font-weight="700" text-anchor="start" letter-spacing="1">DISKS AND SHARES</text>
+<text x="28" y="164" font-size="12.5" fill="#c5c8c6" font-weight="700" text-anchor="start">Sabrent</text>
+<text x="90.6" y="164" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">nvme0n1</text>
+<text x="492" y="164" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">41°C</text>
+<text x="28" y="190" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">/ +5</text>
+<text x="66.4" y="190" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">btrfs</text>
+<text x="492" y="190" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">784 G / 1.9 T · 41%</text>
+<rect x="28" y="197" width="464" height="4" rx="2" fill="#363a40"/>
+<rect x="28" y="197" width="190.2" height="4" rx="2" fill="#88c0d0" class="a fill" style="animation-delay:0.05s"/>
+<text x="28" y="222" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">/boot</text>
+<text x="74.0" y="222" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">vfat</text>
+<text x="492" y="222" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">237 M / 2.0 G · 12%</text>
+<rect x="28" y="229" width="464" height="4" rx="2" fill="#363a40"/>
+<rect x="28" y="229" width="55.7" height="4" rx="2" fill="#88c0d0" class="a fill" style="animation-delay:0.1s"/>
+<text x="28" y="262" font-size="12.5" fill="#c5c8c6" font-weight="700" text-anchor="start">Samsung SSD 990 PRO 2TB</text>
+<text x="215.4" y="262" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">nvme1n1</text>
+<text x="492" y="262" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">48°C</text>
+<text x="28" y="288" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">~/Sites +1</text>
+<text x="112.0" y="288" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">btrfs</text>
+<text x="492" y="288" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">1.3 T / 1.8 T · 72%</text>
+<rect x="28" y="295" width="464" height="4" rx="2" fill="#363a40"/>
+<rect x="28" y="295" width="334.1" height="4" rx="2" fill="#88c0d0" class="a fill" style="animation-delay:0.2s"/>
+<text x="28" y="328" font-size="12.5" fill="#c5c8c6" font-weight="700" text-anchor="start">Samsung SSD 990 PRO 2TB</text>
+<text x="215.4" y="328" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">nvme2n1</text>
+<text x="492" y="328" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">46°C</text>
+<text x="28" y="354" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">/scratch +1</text>
+<text x="119.6" y="354" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">ext4</text>
+<text x="492" y="354" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">322 G / 1.8 T · 18%</text>
+<rect x="28" y="361" width="464" height="4" rx="2" fill="#363a40"/>
+<rect x="28" y="361" width="83.5" height="4" rx="2" fill="#88c0d0" class="a fill" style="animation-delay:0.30000000000000004s"/>
+<text x="28" y="394" font-size="12.5" fill="#c5c8c6" font-weight="700" text-anchor="start">nas · media</text>
+<text x="121.8" y="394" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">network share</text>
+<text x="492" y="394" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end"></text>
+<text x="28" y="420" font-size="12.5" fill="#c5c8c6" font-weight="400" text-anchor="start">~/Media</text>
+<text x="89.19999999999999" y="420" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">cifs</text>
+<text x="492" y="420" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">4.1 T / 6.6 T · 62%</text>
+<rect x="28" y="427" width="464" height="4" rx="2" fill="#363a40"/>
+<rect x="28" y="427" width="287.7" height="4" rx="2" fill="#88c0d0" class="a fill" style="animation-delay:0.4s"/>
+<text x="28" y="460" font-size="12.5" fill="#c5c8c6" font-weight="700" text-anchor="start">backup</text>
+<text x="82.8" y="460" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="start">automount</text>
+<text x="492" y="460" font-size="12.5" fill="#7c838e" font-weight="400" text-anchor="end">not mounted, not woken</text>
+</g>
+</g></g>
+<circle class="a ripple" style="--k:r0" cx="1006" cy="638.0" r="18" fill="none" stroke="#88c0d0" stroke-width="2.5"/>
+<circle class="a ripple" style="--k:r1" cx="922" cy="161" r="18" fill="none" stroke="#88c0d0" stroke-width="2.5"/>
+<circle class="a ripple" style="--k:r2" cx="470" cy="300" r="18" fill="none" stroke="#88c0d0" stroke-width="2.5"/>
+<g id="cursor" class="a">
+<path d="M0,0 L0,22 L6,17 L10,26 L14,24 L10,15 L18,15 Z" fill="#eceff4" stroke="#1d2024" stroke-width="1.4" stroke-linejoin="round"/>
+</g>
+</g></svg>
