@@ -2,6 +2,7 @@
 //! config, the collectors, the lamp rules, the socket protocol, the waybar
 //! reader and the Switchyard sibling client.
 
+pub mod collect;
 pub mod config;
 pub mod model;
 pub mod paths;
