@@ -4,6 +4,7 @@
 
 pub mod collect;
 pub mod config;
+pub mod lamp;
 pub mod model;
 pub mod paths;
 pub mod protocol;
