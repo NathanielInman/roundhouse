@@ -8,6 +8,7 @@
 pub mod apps;
 pub mod gpu;
 pub mod hwmon;
+pub mod net;
 pub mod procfs;
 pub mod storage;
 
@@ -49,6 +50,7 @@ pub struct Collector {
     cpu_model: Option<(String, usize)>,
     mhz: Option<f32>,
     gpus: gpu::GpuReader,
+    net: net::NetReader,
     storage: storage::Storage,
     disks: Vec<Disk>,
     disks_at: Option<Instant>,
@@ -70,6 +72,7 @@ impl Collector {
             cpu_model: None,
             mhz: None,
             gpus: gpu::GpuReader::default(),
+            net: net::NetReader::default(),
             storage: storage::Storage::default(),
             disks: vec![],
             disks_at: None,
@@ -142,6 +145,7 @@ impl Collector {
         };
 
         let gpus = self.gpus.sample(&temps);
+        let network = self.net.sample(deep, cfg.network.public_ip);
 
         // Storage: every sample while open, every 30 s for the lamp otherwise.
         if deep || self.disks_at.is_none_or(|t| t.elapsed() >= STORAGE_IDLE) {
@@ -159,6 +163,7 @@ impl Collector {
                 memory,
                 pressure,
                 gpus,
+                network,
             },
             disks: self.disks.clone(),
             apps: if deep { self.apps.clone() } else { vec![] },

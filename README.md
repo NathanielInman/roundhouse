@@ -42,7 +42,7 @@ Roundhouse replaces.
 
 | Tab | What it answers |
 |---|---|
-| **Machine** | Why is it slow right now? CPU and GPU with sparklines, memory, and pressure stall (PSI), which says whether anything is actually waiting. Memory by app, counted from each app's cgroup, so 40 Chrome processes read as one line. Scopes started with `systemd-run` or `lowprio` show their memory cap. |
+| **Machine** | Why is it slow right now? CPU and GPU with sparklines, memory, pressure stall (PSI), which says whether anything is actually waiting, and network throughput across every real interface (renamed NICs need no config). Memory by app, counted from each app's cgroup, so 40 Chrome processes read as one line. Scopes started with `systemd-run` or `lowprio` show their memory cap. |
 | **Storage** | Where did my space go? Each physical disk with its model and NVMe temperature, and the filesystems on it. btrfs subvolumes and bind mounts fold into one line. Network shares are sized on a helper thread with a deadline, so a NAS that went away never stalls anything, and automount points that nobody has opened are listed without being woken. |
 | **Switchyard** | Shows only while Switchyard runs: the main line, the queue, what's building and what failed. One button opens the Switchyard board from the same icon. |
 
@@ -134,6 +134,9 @@ disk_warn = 85        # percent full
 disk_act = 95
 cpu_temp_warn = 85    # °C
 drive_temp_warn = 65
+
+[network]
+public_ip = false     # true asks ifconfig.co once a minute while the drawer is open
 
 [siblings]
 switchyard = true

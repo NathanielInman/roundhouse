@@ -11,6 +11,7 @@ pub struct Config {
     pub drawer: DrawerConfig,
     pub storage: StorageConfig,
     pub lamp: LampConfig,
+    pub network: NetworkConfig,
     pub siblings: SiblingsConfig,
 }
 
@@ -130,6 +131,14 @@ impl Default for LampConfig {
             mem_free_act: 5.0,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct NetworkConfig {
+    /// Show the public IP. Off by default because it asks a third party
+    /// (ifconfig.co, over plain HTTP) once a minute while the drawer is open.
+    pub public_ip: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

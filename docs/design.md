@@ -15,7 +15,8 @@ The README is the tour; this is the spec.
 3. **Zero setup.** Disks, shares, sensors and GPUs are discovered. The theme
    comes from the bar.
 4. **Cheap when closed.** The daemon never starts subprocesses and samples
-   only the lamp's inputs while the drawer is hidden.
+   only the lamp's inputs while the drawer is hidden. It talks to the
+   internet only when asked to (`network.public_ip`).
 5. **Siblings, not dependencies.** Switchyard and Roundhouse each unlock
    features in the other when both run, and neither needs the other.
 
@@ -74,6 +75,8 @@ at once, so the drawer never opens on old data for long.
 | Pressure | `/proc/pressure/{cpu,memory,io}` | every sample |
 | NVIDIA | NVML, loaded at runtime once | every sample |
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
+| Network | `/sys/class/net/*/statistics` for interfaces with a `device` link (no loopback, bridges or veths) | every sample |
+| Public IP | one plain HTTP `GET /ip` to ifconfig.co on a helper thread, opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
 | Switchyard | its socket | every 2 s open, 15 s closed |

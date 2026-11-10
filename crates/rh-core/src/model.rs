@@ -33,6 +33,22 @@ pub struct Machine {
     pub memory: Memory,
     pub pressure: Pressure,
     pub gpus: Vec<Gpu>,
+    #[serde(default)]
+    pub network: Network,
+}
+
+/// Throughput summed over the interfaces backed by real devices.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Network {
+    /// Interfaces that are up.
+    pub interfaces: Vec<String>,
+    /// Bytes per second.
+    pub down: f64,
+    pub up: f64,
+    pub down_history: Vec<f32>,
+    pub up_history: Vec<f32>,
+    /// Only when `network.public_ip` is on.
+    pub public_ip: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

@@ -35,6 +35,7 @@ struct MachinePage {
     gpu: Tile,
     mem: Tile,
     psi: Tile,
+    net: Tile,
     tiles: Vec<Spring>,
     apps: Rows,
     apps_card: gtk::Box,
@@ -191,6 +192,7 @@ impl Drawer {
             Tile::new("MEMORY"),
             Tile::new("PRESSURE"),
         );
+        let net = Tile::new("NETWORK");
         psi.spark.area.set_visible(false);
         let grid = gtk::Grid::new();
         grid.set_column_spacing(8);
@@ -202,6 +204,10 @@ impl Drawer {
             grid.attach(&s, (i % 2) as i32, (i / 2) as i32, 1, 1);
             tiles.push(s);
         }
+        // Network spans the grid: its sparkline reads better wide.
+        let s = Spring::new(&net.root, Motion::TILE);
+        grid.attach(&s, 0, 2, 2, 1);
+        tiles.push(s);
         let apps_card = card("MEMORY BY APP", "NOT BY PID");
         let apps = Rows::new();
         apps_card.append(&apps.root);
@@ -218,6 +224,7 @@ impl Drawer {
             gpu,
             mem,
             psi,
+            net,
             tiles,
             apps,
             apps_card,
@@ -637,6 +644,19 @@ impl Drawer {
             psi(m.pressure.cpu),
             psi(m.pressure.io)
         ));
+
+        let n = &m.network;
+        let rate = rh_core::collect::net::rate;
+        p.net.title.set_label(&match n.interfaces.as_slice() {
+            [] => "NETWORK".to_string(),
+            ifs => format!("NETWORK · {}", ifs.join(" + ").to_uppercase()),
+        });
+        p.net.aside.set_label(n.public_ip.as_deref().unwrap_or(""));
+        p.net.value.set_label(&format!("↓ {}", rate(n.down)));
+        p.net.unit.set_label(&format!("↑ {}", rate(n.up)));
+        // Scale to the busiest moment on screen, at least 100 kB/s.
+        let peak = n.down_history.iter().cloned().fold(100_000.0f32, f32::max);
+        p.net.spark.set(&n.down_history, peak);
 
         let total = mem.total.max(1) as f64;
         let rows: Vec<RowData> = s

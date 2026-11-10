@@ -260,6 +260,17 @@ fn status(json: bool) -> Result<i32> {
         }
         println!("{:<12}{line}", "gpu");
     }
+    let n = &m.network;
+    let mut net = format!(
+        "down {}  up {}  ({})",
+        rh_core::collect::net::rate(n.down),
+        rh_core::collect::net::rate(n.up),
+        n.interfaces.join(", ")
+    );
+    if let Some(ip) = &n.public_ip {
+        net.push_str(&format!("  public {ip}"));
+    }
+    println!("{:<12}{net}", "network");
     println!("storage");
     for d in &s.disks {
         let mut head = match (&d.model, d.kind) {
