@@ -1,0 +1,22 @@
+[package]
+name = "rh-core"
+description = "Roundhouse collectors, model, lamp rules and protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+bar-anchor = { path = "../bar-anchor" }
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+anyhow.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+# NVML is loaded at runtime, so machines without an NVIDIA driver still work.
+[target.'cfg(target_os = "linux")'.dependencies]
+nvml-wrapper = "0.13"

@@ -1,0 +1,229 @@
+//! The snapshot the daemon publishes. Clients (drawer, bar module, CLI,
+//! siblings) read it; only the daemon writes it.
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Snapshot {
+    pub host: Host,
+    pub machine: Machine,
+    pub disks: Vec<Disk>,
+    /// Memory by app, largest first. Filled while the drawer is open.
+    pub apps: Vec<AppUsage>,
+    pub lamp: Lamp,
+    pub siblings: Siblings,
+    /// A config problem to show in the drawer.
+    #[serde(default)]
+    pub config_error: Option<String>,
+    /// Unix seconds when the sample was taken.
+    pub now: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Host {
+    pub name: String,
+    pub os: String,
+    pub kernel: String,
+    pub uptime: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Machine {
+    pub cpu: Cpu,
+    pub memory: Memory,
+    pub pressure: Pressure,
+    pub gpus: Vec<Gpu>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Cpu {
+    pub model: String,
+    pub threads: usize,
+    /// Percent busy across all threads since the last sample.
+    pub usage: f32,
+    pub temp: Option<f32>,
+    pub mhz: Option<f32>,
+    /// Recent usage, oldest first.
+    pub history: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Memory {
+    pub total: u64,
+    pub available: u64,
+    pub swap_total: u64,
+    pub swap_used: u64,
+    /// Recent used percentage, oldest first.
+    pub history: Vec<f32>,
+}
+
+impl Memory {
+    pub fn used(&self) -> u64 {
+        self.total.saturating_sub(self.available)
+    }
+
+    pub fn used_pct(&self) -> f32 {
+        if self.total == 0 {
+            0.0
+        } else {
+            self.used() as f32 / self.total as f32 * 100.0
+        }
+    }
+}
+
+/// Pressure stall information: the share of time something waited on a
+/// resource. `some` means at least one task waited; `full` means all did.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub struct Psi {
+    pub some10: f32,
+    pub some60: f32,
+    pub some300: f32,
+    pub full10: f32,
+    pub full60: f32,
+    pub full300: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Pressure {
+    pub cpu: Option<Psi>,
+    pub memory: Option<Psi>,
+    pub io: Option<Psi>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Gpu {
+    pub name: String,
+    pub vendor: String,
+    pub usage: Option<f32>,
+    pub temp: Option<f32>,
+    pub vram_used: Option<u64>,
+    pub vram_total: Option<u64>,
+    pub power_w: Option<f32>,
+    pub history: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum DiskKind {
+    #[default]
+    Local,
+    Network,
+    /// An automount point with nothing mounted on it right now.
+    OnDemand,
+}
+
+/// One physical disk (or network share) and the filesystems on it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Disk {
+    /// Kernel name (`nvme0n1`) or share source (`//192.168.1.51/private`).
+    pub name: String,
+    pub model: Option<String>,
+    pub kind: DiskKind,
+    pub temp: Option<f32>,
+    pub filesystems: Vec<Filesystem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Filesystem {
+    pub source: String,
+    pub fstype: String,
+    /// Mount points, the main one first.
+    pub mounts: Vec<String>,
+    pub total: u64,
+    pub used: u64,
+    pub avail: u64,
+    pub readonly: bool,
+    /// The last size query did not answer in time (a share that went away).
+    #[serde(default)]
+    pub stale: bool,
+}
+
+impl Filesystem {
+    pub fn used_pct(&self) -> f32 {
+        let denom = self.used + self.avail;
+        if denom == 0 {
+            0.0
+        } else {
+            self.used as f32 / denom as f32 * 100.0
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AppUsage {
+    pub name: String,
+    /// "38 procs", "scope", "service".
+    pub detail: String,
+    pub mem: u64,
+    /// The memory limit of the app's cgroup, when it has one (lowprio).
+    pub cap: Option<u64>,
+    pub procs: usize,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum Level {
+    #[default]
+    Calm,
+    HeadsUp,
+    Act,
+}
+
+impl Level {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Level::Calm => "calm",
+            Level::HeadsUp => "heads-up",
+            Level::Act => "act",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Reason {
+    pub level: Level,
+    pub text: String,
+    /// The drawer tab that explains it.
+    pub tab: String,
+}
+
+/// The bar lamp: the most urgent level and every reason behind it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Lamp {
+    pub level: Level,
+    pub reasons: Vec<Reason>,
+}
+
+/// What the siblings that are running right now report. A missing sibling is
+/// `None`, never an error.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Siblings {
+    pub switchyard: Option<SwitchyardView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SwitchyardView {
+    /// Switchyard's aggregate phase: idle, queued, building, running, ok,
+    /// failed.
+    pub phase: String,
+    pub tasks: usize,
+    /// The heavy build on the main line.
+    pub current: Option<String>,
+    pub queue: Vec<String>,
+    pub waiting_memory: bool,
+    pub building: Vec<String>,
+    pub running: Vec<String>,
+    pub failed: Vec<String>,
+    /// Task id to label.
+    pub labels: Vec<(String, String)>,
+}
+
+impl SwitchyardView {
+    pub fn label<'a>(&'a self, id: &'a str) -> &'a str {
+        self.labels
+            .iter()
+            .find(|(i, _)| i == id)
+            .map(|(_, l)| l.as_str())
+            .unwrap_or(id)
+    }
+}
