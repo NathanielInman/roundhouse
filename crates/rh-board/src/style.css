@@ -1,0 +1,146 @@
+/* Roundhouse drawer default theme. With theme.from = "waybar" the bar's own
+   colors and font replace these tokens. Override anything in
+   ~/.config/roundhouse/style.css; redefining an @define-color token recolors
+   everything that uses it. */
+
+@define-color rh_panel rgba(30, 32, 36, 0.97);
+@define-color rh_well #15171a;
+@define-color rh_border #41464e;
+@define-color rh_fg #c5c8c6;
+@define-color rh_dim #7c838e;
+@define-color rh_tile rgba(255, 255, 255, 0.035);
+@define-color rh_tile_border rgba(255, 255, 255, 0.07);
+@define-color rh_tile_hover #33373d;
+@define-color rh_accent #88c0d0;
+@define-color rh_calm #a3be8c;
+@define-color rh_heads_up #ebcb8b;
+@define-color rh_act #bf616a;
+@define-color rh_idle #555b64;
+
+window.roundhouse {
+  background: transparent;
+  color: @rh_fg;
+  font-family: monospace;
+  font-size: 13px;
+}
+window.roundhouse * { font-family: inherit; }
+
+.panel {
+  background: @rh_panel;
+  border: 1px solid @rh_border;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  padding: 14px;
+}
+
+.dim { color: @rh_dim; }
+.num { font-feature-settings: "tnum"; }
+
+/* ---- header ---- */
+.host { font-weight: bold; letter-spacing: 1px; }
+.sub { color: @rh_dim; font-size: 11px; }
+.chip {
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 9px;
+  border-radius: 999px;
+}
+.chip.calm { color: @rh_calm; background: alpha(@rh_calm, 0.13); }
+.chip.heads-up { color: @rh_heads_up; background: alpha(@rh_heads_up, 0.14); }
+.chip.act { color: @rh_act; background: alpha(@rh_act, 0.16); }
+.lamp.calm { color: @rh_calm; }
+.lamp.heads-up { color: @rh_heads_up; }
+.lamp.act { color: @rh_act; }
+
+/* ---- tabs ---- */
+.tabs {
+  background: @rh_tile;
+  border-radius: 9px;
+  padding: 3px;
+}
+.tabs button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: @rh_dim;
+  padding: 4px 0;
+  border-radius: 7px;
+  min-height: 0;
+  font-weight: bold;
+  transition: background-color 200ms, color 200ms;
+}
+.tabs button:hover { color: @rh_fg; }
+.tabs button.active { background: @rh_accent; color: @rh_well; }
+
+/* ---- verdict ---- */
+.verdict {
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.verdict.heads-up { background: alpha(@rh_heads_up, 0.09); border: 1px solid alpha(@rh_heads_up, 0.3); }
+.verdict.act { background: alpha(@rh_act, 0.1); border: 1px solid alpha(@rh_act, 0.35); }
+.verdict button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 2px 0;
+  min-height: 0;
+  color: @rh_fg;
+}
+.verdict button:hover { color: @rh_accent; }
+
+.notice { color: @rh_heads_up; font-size: 11px; }
+
+/* ---- tiles and cards ---- */
+.tile, .card {
+  background: @rh_tile;
+  border: 1px solid @rh_tile_border;
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+.t-label {
+  color: @rh_dim;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.t-val { font-size: 20px; font-weight: bold; }
+.t-unit { color: @rh_dim; font-size: 11px; }
+.spark { color: @rh_accent; }
+
+/* ---- rows ---- */
+.row { padding: 4px 0; }
+.row.head { padding-top: 8px; }
+.row.head > box > label:first-child { font-weight: bold; }
+.row .detail { color: @rh_dim; }
+.row .right { color: @rh_dim; }
+.row .right.heads-up { color: @rh_heads_up; }
+.row .right.act { color: @rh_act; }
+
+progressbar.meter > trough {
+  min-height: 4px;
+  border-radius: 2px;
+  background: @rh_tile_border;
+  border: none;
+}
+progressbar.meter > trough > progress {
+  min-height: 4px;
+  border-radius: 2px;
+  background: @rh_accent;
+  border: none;
+}
+progressbar.meter.calm > trough > progress { background: @rh_calm; }
+progressbar.meter.heads-up > trough > progress { background: @rh_heads_up; }
+progressbar.meter.act > trough > progress { background: @rh_act; }
+
+.handoff {
+  background: @rh_tile;
+  border: 1px solid @rh_tile_border;
+  border-radius: 8px;
+  color: @rh_fg;
+  padding: 6px 10px;
+  box-shadow: none;
+}
+.handoff:hover { background: @rh_tile_hover; color: @rh_accent; }
+
+.foot { color: @rh_dim; font-size: 10.5px; }

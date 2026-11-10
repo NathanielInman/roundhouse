@@ -1,0 +1,17 @@
+[package]
+name = "rh-board"
+description = "Roundhouse drawer: the GTK4 layer-shell panel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# The layer-shell drawer is Linux only; macOS and Windows get a tray app.
+[target.'cfg(target_os = "linux")'.dependencies]
+rh-core = { path = "../rh-core" }
+bar-anchor = { path = "../bar-anchor" }
+serde_json.workspace = true
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+gtk4-layer-shell = "0.8"
+async-channel = "2"
