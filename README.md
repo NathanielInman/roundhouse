@@ -35,7 +35,7 @@ Roundhouse replaces.
 - **Temperatures against their limits.** What counts as hot depends on the
   part, so Roundhouse asks each one: the drive's own warning temperature,
   the CPU's TjMax, the point where the GPU slows down. Every reading shows
-  next to that limit (`58 / 95°C`).
+  next to that limit (`58 / 95°C`), green while it is well under.
 - **It opens from the icon you clicked.** The drawer springs out of the bar on
   any edge, on whichever monitor you clicked. The anchoring code is
   Switchyard's.

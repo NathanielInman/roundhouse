@@ -128,7 +128,8 @@ pub struct RowData {
     pub name: String,
     pub detail: String,
     pub right: String,
-    /// Severity class for the right-hand text: "", "heads-up" or "act".
+    /// Severity class for the right-hand text: "", "calm", "heads-up" or
+    /// "act".
     pub right_class: &'static str,
     /// Meter fill 0..1; `None` hides the meter.
     pub meter: Option<f64>,
@@ -182,7 +183,7 @@ impl Row {
         self.name.set_label(&d.name);
         self.detail.set_label(&d.detail);
         self.right.set_label(&d.right);
-        for c in ["heads-up", "act"] {
+        for c in ["calm", "heads-up", "act"] {
             self.right.remove_css_class(c);
         }
         if !d.right_class.is_empty() {

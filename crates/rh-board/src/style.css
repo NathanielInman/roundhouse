@@ -104,6 +104,7 @@ window.roundhouse * { font-family: inherit; }
   font-weight: bold;
   letter-spacing: 1px;
 }
+.t-label.calm { color: @rh_calm; }
 .t-label.heads-up { color: @rh_heads_up; }
 .t-label.act { color: @rh_act; }
 .t-val { font-size: 20px; font-weight: bold; }
@@ -116,6 +117,7 @@ window.roundhouse * { font-family: inherit; }
 .row.head > box > label:first-child { font-weight: bold; }
 .row .detail { color: @rh_dim; }
 .row .right { color: @rh_dim; }
+.row .right.calm { color: @rh_calm; }
 .row .right.heads-up { color: @rh_heads_up; }
 .row .right.act { color: @rh_act; }
 

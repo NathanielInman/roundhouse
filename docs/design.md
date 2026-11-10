@@ -155,8 +155,9 @@ Heads-up is 10°C under the limit and act is the limit. A value outside
 part that reports nothing gets the old fixed thresholds: CPU 85/95, GPU
 83/90, drive 65/75. A `[lamp]` key the user sets wins over all of this.
 
-Every client shows a temperature against its act line ("58 / 95°C"), and a
-lamp reason names the limit ("CPU is at 87°C (limit 95°C)"), so the number
+Every client shows a temperature against its act line ("58 / 95°C"), the
+drawer colors it green, amber or red by where it sits, and a lamp reason
+names the limit ("CPU is at 87°C (limit 95°C)"), so the number
 answers whether it is fine without a lookup.
 
 ## Anchoring

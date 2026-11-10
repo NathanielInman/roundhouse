@@ -111,23 +111,15 @@ fn level_class(pct: f32, warn: f32, act: f32) -> &'static str {
     }
 }
 
-/// The same severity class for a level, empty when calm.
-fn level_css(l: Level) -> &'static str {
-    match l {
-        Level::Calm => "",
-        l => l.as_str(),
-    }
-}
-
-/// Shows a temperature against its limit and colors it past heads-up.
+/// Shows a temperature against its limit, green, amber or red by where it
+/// sits.
 fn set_temp(w: &gtk::Label, temp: Option<f32>, limit: TempLimit) {
     w.set_label(&temp.map(|t| limit.show(t)).unwrap_or_default());
-    for c in ["heads-up", "act"] {
+    for c in ["calm", "heads-up", "act"] {
         w.remove_css_class(c);
     }
-    let class = temp.map_or("", |t| level_css(limit.level(t)));
-    if !class.is_empty() {
-        w.add_css_class(class);
+    if let Some(t) = temp {
+        w.add_css_class(limit.level(t).as_str());
     }
 }
 
@@ -742,7 +734,7 @@ impl Drawer {
                 (DiskKind::OnDemand, _) => ("not mounted, not woken".to_string(), ""),
                 (_, Some(temp)) => {
                     let limit = t.drive_temp(d.temp_limit);
-                    (limit.show(temp), level_css(limit.level(temp)))
+                    (limit.show(temp), limit.level(temp).as_str())
                 }
                 _ => (String::new(), ""),
             };
