@@ -178,6 +178,9 @@ The rules:
    `Anchor` JSON is the contract.
 4. **Handoff keeps the anchor.** When one opens the other, it sends the same
    `Anchor` it opened with, so the second panel grows out of the same icon.
+5. **One panel at a time.** Whichever panel opens sends `{"cmd":"hide"}` to
+   the other, so clicking the other icon in the bar (or the handoff button)
+   never leaves both open.
 
 What Roundhouse uses from Switchyard today:
 

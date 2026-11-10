@@ -470,6 +470,10 @@ impl Drawer {
                 }
             }
             send_quiet(Request::BoardVisible { visible: true });
+            // One panel at a time: opening the drawer closes Switchyard's board.
+            if self.cfg.borrow().siblings.switchyard {
+                std::thread::spawn(rh_core::sibling::switchyard_hide);
+            }
         }
     }
 

@@ -105,6 +105,12 @@ pub fn switchyard_show(anchor: Option<&Anchor>) -> bool {
     ask(&req.to_string()).is_some_and(|r| r.contains("\"ok\":true"))
 }
 
+/// Asks Switchyard to close its board, so only one panel is open at a time.
+/// Does nothing when Switchyard is not running.
+pub fn switchyard_hide() {
+    let _ = ask(r#"{"cmd":"hide"}"#);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
