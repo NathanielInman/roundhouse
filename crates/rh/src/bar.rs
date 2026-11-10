@@ -1,5 +1,5 @@
-//! The waybar line: one icon, an optional pinned number, and a class that
-//! follows the lamp so the bar's CSS can color it.
+//! The waybar line: one lamp glyph (and a pinned number, if asked for) with
+//! a class that follows the lamp so the bar's CSS can color it.
 
 use rh_core::config::Config;
 use rh_core::model::{Level, Snapshot};
@@ -90,15 +90,24 @@ mod tests {
     use rh_core::model::Reason;
 
     #[test]
-    fn calm_line_pins_cpu_temp() {
+    fn calm_line_is_just_the_lamp() {
         let mut s = Snapshot::default();
         s.machine.cpu.temp = Some(54.4);
         s.machine.cpu.temp_limit = Some(95.0);
         let l = line(&s, &Config::default());
-        assert!(l.text.ends_with(" 54°"));
+        assert_eq!(l.text, Config::default().bar.icon);
         assert_eq!(l.class, "calm");
         assert!(l.tooltip.starts_with("All calm"));
         assert!(l.tooltip.contains("CPU 0% · 54 / 95°C"));
+    }
+
+    #[test]
+    fn pins_a_number() {
+        let mut s = Snapshot::default();
+        s.machine.cpu.temp = Some(54.4);
+        let mut cfg = Config::default();
+        cfg.bar.pin = "cpu.temp".into();
+        assert!(line(&s, &cfg).text.ends_with(" 54°"));
     }
 
     #[test]
@@ -110,8 +119,7 @@ mod tests {
             text: "/ is 96% full & <rising>".into(),
             tab: "storage".into(),
         });
-        let mut cfg = Config::default();
-        cfg.bar.pin = "none".into();
+        let cfg = Config::default();
         let l = line(&s, &cfg);
         assert_eq!(l.text, cfg.bar.icon);
         assert_eq!(l.class, "act");

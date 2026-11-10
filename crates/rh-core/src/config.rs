@@ -31,8 +31,8 @@ pub struct BarConfig {
 impl Default for BarConfig {
     fn default() -> Self {
         BarConfig {
-            icon: "\u{f04c5}".into(),
-            pin: "cpu.temp".into(),
+            icon: "\u{f0765}".into(),
+            pin: "none".into(),
             namespace: "waybar".into(),
         }
     }

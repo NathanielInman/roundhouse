@@ -7,8 +7,9 @@ The README is the tour; this is the spec.
 
 ## Goals
 
-1. **One lamp.** The bar module is a single icon and an optional pinned
-   number. Its color says whether anything needs you.
+1. **One lamp.** The bar module is a single dot (and a pinned number only
+   if you ask for one). Its color says whether anything needs you; the
+   tooltip and the drawer say why.
 2. **Answers, not numbers.** Each tab answers one question ("why is it
    slow?", "where did my space go?"). Raw counters are there to back the
    answer up.

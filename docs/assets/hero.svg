@@ -115,19 +115,9 @@
 <text x="858" y="643.0" font-size="14" fill="#7c838e" font-weight="400" text-anchor="start">mouse 81%</text>
 <line x1="844" y1="626" x2="844" y2="650" stroke="#3b4048"/>
 <line x1="976" y1="626" x2="976" y2="650" stroke="#3b4048"/>
-<rect id="lampbg" class="a" x="984" y="623" width="74" height="30" rx="7" fill="#88c0d0" fill-opacity=".22"/>
+<rect id="lampbg" class="a" x="988" y="623" width="36" height="30" rx="7" fill="#88c0d0" fill-opacity=".22"/>
 <circle class="pulse" cx="1006" cy="638.0" r="13" fill="none" stroke="#a3be8c" stroke-width="2"/>
-<circle cx="1006" cy="638.0" r="11" fill="none" stroke="#c5c8c6" stroke-width="1.6"/>
-<line x1="1013.0" y1="638.0" x2="1016.0" y2="638.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1010.9" y1="642.9" x2="1013.1" y2="645.1" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1006.0" y1="645.0" x2="1006.0" y2="648.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1001.1" y1="642.9" x2="998.9" y2="645.1" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="999.0" y1="638.0" x2="996.0" y2="638.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1001.1" y1="633.1" x2="998.9" y2="630.9" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1006.0" y1="631.0" x2="1006.0" y2="628.0" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<line x1="1010.9" y1="633.1" x2="1013.1" y2="630.9" stroke="#c5c8c6" stroke-width="1.6" stroke-linecap="round"/>
-<circle cx="1006" cy="638.0" r="4.0" fill="#a3be8c"/>
-<text x="1024" y="643.0" font-size="14" fill="#c5c8c6" font-weight="400" text-anchor="start">54°</text>
+<circle cx="1006" cy="638.0" r="7.5" fill="#a3be8c"/>
 <line x1="1068" y1="626" x2="1068" y2="650" stroke="#3b4048"/>
 <text x="1178" y="643.0" font-size="14" fill="#c5c8c6" font-weight="400" text-anchor="end">14:32</text>
 <g id="drawer" class="a"><g transform="translate(662,76)">

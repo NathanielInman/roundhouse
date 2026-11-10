@@ -29,10 +29,9 @@ added another module, two drives never made it in at all, and none of it
 remembered anything or told me which number mattered. That drawer is what
 Roundhouse replaces.
 
-- **One lamp.** The bar shows a single icon and one pinned number (CPU
-  temperature by default). It turns amber or red only when something needs
-  you: a filesystem filling up, a drive or CPU running hot, memory pressure.
-  The tooltip says why.
+- **One lamp.** The bar shows a single dot. It turns amber or red only when
+  something needs you: a filesystem filling up, a drive or CPU running hot,
+  memory pressure. The tooltip says why, and a click shows the rest.
 - **Temperatures against their limits.** What counts as hot depends on the
   part, so Roundhouse asks each one: the drive's own warning temperature,
   the CPU's TjMax, the point where the GPU slows down. Every reading shows
@@ -113,6 +112,7 @@ The module's class follows the lamp (`calm`, `heads-up`, `act`, `offline`), so
 the bar can color it:
 
 ```css
+#custom-roundhouse.calm { color: #a3be8c; }
 #custom-roundhouse.heads-up { color: #ebcb8b; }
 #custom-roundhouse.act { color: #bf616a; }
 ```
@@ -126,7 +126,8 @@ Everything is optional. `~/.config/roundhouse/config.toml`:
 
 ```toml
 [bar]
-pin = "cpu.temp"      # cpu.temp, cpu, memory, gpu.temp, gpu or none
+icon = "\U000F0765"   # the dot (Nerd Font md-circle); any glyph works
+pin = "none"          # a number beside the dot: cpu.temp, cpu, memory, gpu.temp, gpu or none
 namespace = "waybar"  # the bar's layer-shell namespace
 
 [theme]
