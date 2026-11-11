@@ -169,8 +169,16 @@ fn config_mtime() -> Option<SystemTime> {
         .ok()
 }
 
-/// Starts `rh-board`, preferring the one installed next to `rh`.
+/// Starts `rh-board`: `ROUNDHOUSE_BOARD` when set (tests point it at a
+/// stand-in), else the one installed next to `rh`, else the one on `PATH`.
 fn spawn_board() {
+    if let Some(b) = std::env::var_os("ROUNDHOUSE_BOARD").filter(|b| !b.is_empty()) {
+        let _ = std::process::Command::new(b)
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .map(|mut c| std::thread::spawn(move || c.wait()));
+        return;
+    }
     let exe = std::env::current_exe().ok();
     let local = exe
         .as_ref()

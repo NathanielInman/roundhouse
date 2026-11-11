@@ -1,0 +1,12 @@
+{
+  "level": "act",
+  "reasons": [
+    {
+      "level": "act",
+      "text": "/data is 96% full",
+      "tab": "storage",
+      "key": "fs:/data"
+    }
+  ],
+  "hold": "/data is 96% full"
+}

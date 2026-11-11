@@ -23,6 +23,12 @@ Parsers are pure functions over text and are tested against real output
 (`/proc/stat`, mountinfo, waybar CSS and JSONC, Switchyard replies). Add a
 test with a real sample when you touch one.
 
+`crates/rh/tests/daemon.rs` drives a real daemon in a throwaway directory,
+with `ROUNDHOUSE_BOARD=/bin/true` so no drawer opens. The lamp's JSON is a
+sibling contract: `testdata/lamp-contract.json` holds every field Switchyard
+may read, and the test fails if one disappears or changes type. Add new
+fields to the fixture; never remove one.
+
 ## Isolation
 
 The machine you work on may run an installed Roundhouse. Point a dev build

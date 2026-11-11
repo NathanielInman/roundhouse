@@ -827,4 +827,45 @@ mod tests {
             "net.route"
         );
     }
+
+    /// Every field and type in the checked-in lamp is still sent: Switchyard
+    /// reads this shape, so it may only grow. Add to the fixture when a field
+    /// is added; never remove one.
+    #[test]
+    fn the_lamp_contract_only_grows() {
+        fn covers(fixture: &serde_json::Value, out: &serde_json::Value, path: &str) {
+            use serde_json::Value;
+            match (fixture, out) {
+                (Value::Object(f), Value::Object(o)) => {
+                    for (k, v) in f {
+                        let next = format!("{path}.{k}");
+                        let got = o.get(k).unwrap_or_else(|| panic!("{next} is gone"));
+                        covers(v, got, &next);
+                    }
+                }
+                (Value::Array(f), Value::Array(o)) => {
+                    if let (Some(f0), Some(o0)) = (f.first(), o.first()) {
+                        covers(f0, o0, &format!("{path}[0]"));
+                    }
+                }
+                (f, o) => assert_eq!(
+                    std::mem::discriminant(f),
+                    std::mem::discriminant(o),
+                    "{path} changed type"
+                ),
+            }
+        }
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../testdata/lamp-contract.json")).unwrap();
+        let mut s = Snapshot::default();
+        s.disks.push(Disk {
+            name: "nvme0n1".into(),
+            filesystems: vec![fs("/data", 96, 4)],
+            ..Default::default()
+        });
+        let mut lamp = evaluate(&s, &LampConfig::default());
+        lamp.hold = hold(&lamp, None);
+        let out = serde_json::to_value(&lamp).unwrap();
+        covers(&fixture, &out, "lamp");
+    }
 }
