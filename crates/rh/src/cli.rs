@@ -16,6 +16,8 @@ Usage:
   rh show [--tab NAME] [--center]     open the drawer
   rh hide                             close the drawer
   rh bar                              the waybar module (prints JSON lines)
+  rh session [on|off|toggle]          a recording session: Switchyard holds heavy
+                                      builds until it ends (no argument: show it)
   rh status [--json]                  print what the drawer shows
   rh doctor                           check the setup
   rh daemon                           run the daemon in the foreground
@@ -61,6 +63,7 @@ pub fn run(args: &[String]) -> Result<i32> {
             Ok(0)
         }
         Some("status") => status(flag(rest, "--json")),
+        Some("session") => session(rest.first().map(String::as_str)),
         Some("doctor") => doctor(),
         Some(other) => Err(anyhow!("unknown command `{other}` (try `rh --help`)")),
     }
@@ -194,6 +197,54 @@ fn snapshot() -> (Snapshot, bool) {
     (s, false)
 }
 
+fn session_line(s: &Snapshot) -> String {
+    match &s.session {
+        Some(x) => {
+            let how = if x.auto {
+                "started by a recording app, "
+            } else {
+                ""
+            };
+            format!(
+                "on for {} ({how}heavy builds wait)",
+                rh_core::duration(s.now - x.since)
+            )
+        }
+        None => "off".into(),
+    }
+}
+
+fn session(arg: Option<&str>) -> Result<i32> {
+    let on = match arg {
+        None => {
+            let (s, live) = snapshot();
+            if !live {
+                println!("off (the daemon is not running)");
+            } else {
+                println!("{}", session_line(&s));
+            }
+            return Ok(0);
+        }
+        Some("on" | "start") => Some(true),
+        Some("off" | "stop" | "end") => Some(false),
+        Some("toggle") => None,
+        Some(other) => {
+            return Err(anyhow!(
+                "unknown session argument `{other}` (on, off or toggle)"
+            ))
+        }
+    };
+    ensure_daemon()?;
+    let r = rh_core::protocol::request(&Request::Session { on })?;
+    if let Some(e) = r.error {
+        return Err(anyhow!(e));
+    }
+    if let Some(s) = r.snapshot {
+        println!("recording session {}", session_line(&s));
+    }
+    Ok(0)
+}
+
 fn status(json: bool) -> Result<i32> {
     let (s, _) = snapshot();
     if json {
@@ -222,6 +273,9 @@ fn status(json: bool) -> Result<i32> {
         ),
     };
     println!("{:<12}{lamp}", "lamp");
+    if s.session.is_some() {
+        println!("{:<12}{}", "session", session_line(&s));
+    }
     let t = Config::load().0.lamp;
     let mut cpu = format!("{}  {:.0}%", m.cpu.model, m.cpu.usage);
     if let Some(temp) = m.cpu.temp {

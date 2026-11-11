@@ -39,6 +39,12 @@ pub fn line(snap: &Snapshot, cfg: &Config) -> BarLine {
     } else {
         tip.extend(snap.lamp.reasons.iter().map(|r| format!("• {}", r.text)));
     }
+    if let Some(s) = &snap.session {
+        tip.push(format!(
+            "Recording session · {} · heavy builds wait",
+            rh_core::duration(snap.now - s.since)
+        ));
+    }
     tip.push(String::new());
     let t = &cfg.lamp;
     let mut cpu = format!("CPU {:.0}%", m.cpu.usage);

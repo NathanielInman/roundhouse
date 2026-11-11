@@ -40,6 +40,8 @@ struct MachinePage {
     verdict: gtk::Box,
     /// What Switchyard's heavy work is doing, while it is doing something.
     yard_line: gtk::Button,
+    /// The recording session, while one is on; a click ends it.
+    session_line: gtk::Button,
     reasons: gtk::Box,
     reasons_sig: RefCell<String>,
     cpu: Tile,
@@ -227,6 +229,15 @@ impl Drawer {
         }
         yard_line.set_tooltip_text(Some("Open the Switchyard board"));
         yard_line.set_visible(false);
+        let session_line = gtk::Button::with_label("");
+        session_line.add_css_class("yard-line");
+        session_line.add_css_class("session");
+        if let Some(l) = session_line.child().and_downcast::<gtk::Label>() {
+            l.set_xalign(0.0);
+            l.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        }
+        session_line.set_tooltip_text(Some("End the recording session"));
+        session_line.set_visible(false);
         let (cpu, gpu, mem, psi) = (
             Tile::new("CPU"),
             Tile::new("GPU"),
@@ -254,6 +265,7 @@ impl Drawer {
         apps_card.append(&apps.root);
         let mroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         mroot.append(&verdict);
+        mroot.append(&session_line);
         mroot.append(&yard_line);
         mroot.append(&grid);
         mroot.append(&apps_card);
@@ -261,6 +273,7 @@ impl Drawer {
             root: mroot,
             verdict,
             yard_line,
+            session_line,
             reasons,
             reasons_sig: RefCell::new(String::new()),
             cpu,
@@ -365,6 +378,9 @@ impl Drawer {
                 }
             });
         }
+        d.machine.session_line.connect_clicked(move |_| {
+            send_quiet(Request::Session { on: Some(false) });
+        });
         {
             let w = Rc::downgrade(&d);
             d.machine.yard_line.connect_clicked(move |_| {
@@ -648,6 +664,18 @@ impl Drawer {
             p.verdict.add_css_class(s.lamp.level.as_str());
         }
         p.verdict.set_visible(!s.lamp.reasons.is_empty());
+
+        // A recording session holds heavy builds; one click ends it.
+        p.session_line.set_visible(s.session.is_some());
+        if let Some(x) = &s.session {
+            let text = format!(
+                "\u{25cf} Recording session · {} · heavy builds wait",
+                duration(s.now - x.since)
+            );
+            if p.session_line.label().as_deref() != Some(text.as_str()) {
+                p.session_line.set_label(&text);
+            }
+        }
 
         // A heavy build explains a busy machine; one click opens the board.
         let line = s.siblings.switchyard.as_ref().and_then(|y| y.status_line());

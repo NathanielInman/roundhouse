@@ -15,6 +15,9 @@ pub struct Snapshot {
     /// A config problem to show in the drawer.
     #[serde(default)]
     pub config_error: Option<String>,
+    /// The recording session, while one is on.
+    #[serde(default)]
+    pub session: Option<Session>,
     /// Unix seconds when the sample was taken.
     pub now: f64,
 }
@@ -257,6 +260,25 @@ pub struct Reason {
 pub struct Lamp {
     pub level: Level,
     pub reasons: Vec<Reason>,
+    /// Why heavy work should wait right now, or `null`. Switchyard holds its
+    /// next heavy build while this is set. It is set by a recording session
+    /// or by an act reason that more work would make worse (disk, memory);
+    /// a hot part is not one, since the build is what heats it. Always sent,
+    /// so a sibling can tell a calm answer from an older Roundhouse.
+    #[serde(default)]
+    pub hold: Option<String>,
+}
+
+/// A recording session: heavy work waits until it ends, without turning the
+/// lamp red.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Session {
+    /// Unix seconds when it started.
+    pub since: f64,
+    /// Started on its own because an app is recording (`session.auto`),
+    /// rather than with `rh session on`.
+    #[serde(default)]
+    pub auto: bool,
 }
 
 /// What the siblings that are running right now report. A missing sibling is

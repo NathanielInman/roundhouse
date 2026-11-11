@@ -249,13 +249,28 @@ What Switchyard uses from Roundhouse:
 
 | Request | Used for |
 |---|---|
-| `{"cmd":"snapshot"}` on `rh.sock` | `lamp.level` and `lamp.reasons[].level`/`text`. While the lamp is at `act`, Switchyard holds the next heavy build with the reason as its message and starts it on the first calm answer (`mainline.respect_roundhouse` in Switchyard's config). |
+| `{"cmd":"snapshot"}` on `rh.sock` | `lamp.level`, `lamp.reasons[].level`/`text` and `lamp.hold`. While `hold` is set, Switchyard holds the next heavy build with it as the message and starts the build once it clears (`mainline.respect_roundhouse` in Switchyard's config). A Switchyard that predates `hold` holds on `act`. |
 | `{"cmd":"hide"}` on `rh.sock` | Sent when the board opens, so the drawer closes. |
 | `{"cmd":"show","anchor":{...}}` on `rh.sock` | The board's Roundhouse link, whose dot is `lamp.level`. |
 
-The `lamp` shape (`level`, and `reasons` with `level`, `text`, `tab` and
-`key`) is
+The `lamp` shape (`level`, `hold`, and `reasons` with `level`, `text`,
+`tab` and `key`) is
 part of the sibling contract: change it only by adding fields.
+
+## Recording sessions
+
+`rh session on` starts a recording session and `rh session off` ends it (the
+drawer's session line ends it too). While one is on, `lamp.hold` is
+"a recording session is on", so Switchyard starts no heavy build, and the
+lamp keeps its color: a session is not an alarm. The session is kept in
+`$ROUNDHOUSE_STATE_DIR/session.json`, so it survives a daemon restart.
+
+`lamp.hold` is how Roundhouse tells a sibling that heavy work should wait.
+It is set by a session, or by the first `act` reason that more work would
+make worse (a filesystem, memory). Heat is never a hold: a build heats the
+CPU, and a part at its limit protects itself. The field is always sent
+(`null` when clear), so a sibling can tell a calm answer from an older
+Roundhouse.
 
 ## Protocol
 
@@ -271,9 +286,12 @@ request. Shapes follow Switchyard's.
 {"cmd":"board_visible","visible":true}
 {"cmd":"subscribe","kind":"board"}
 {"cmd":"subscribe","kind":"bar"}
+{"cmd":"session","on":true}
 ```
 
 Replies are `{"ok":true}` with optional `snapshot`, `version` or `error`.
+`session` without `on` toggles, and its reply carries the snapshot after the
+change.
 
 A `board` subscription receives `{"event":"snapshot","snapshot":{...}}` on
 every sample, plus `{"event":"show",...}`, `{"event":"toggle",...}` and

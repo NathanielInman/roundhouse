@@ -33,6 +33,10 @@ struct State {
     visible: bool,
     boards: Vec<Sub>,
     bars: Vec<Sub>,
+    /// The recording session, while one is on.
+    session: Option<rh_core::model::Session>,
+    /// Take a sample now rather than at the next tick.
+    wake: bool,
     /// The latest answer from Switchyard, kept by its own thread.
     switchyard: Option<rh_core::model::SwitchyardView>,
     bar_line: String,
@@ -85,6 +89,27 @@ fn broadcast(subs: &mut Vec<Sub>, line: &str) -> usize {
 
 fn event_line(e: &Event) -> String {
     serde_json::to_string(e).unwrap_or_default()
+}
+
+fn load_session() -> Option<rh_core::model::Session> {
+    let text = std::fs::read_to_string(rh_core::paths::session_file()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+/// Keeps the session on disk so it survives a daemon restart.
+fn save_session(s: Option<&rh_core::model::Session>) {
+    let path = rh_core::paths::session_file();
+    match s {
+        Some(s) => {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            let _ = std::fs::write(&path, serde_json::to_string(s).unwrap_or_default());
+        }
+        None => {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
 }
 
 fn config_mtime() -> Option<SystemTime> {
@@ -229,6 +254,26 @@ fn handle(shared: Shared, stream: Stream) {
                 broadcast(&mut st.boards, &event_line(&Event::Hide));
                 Reply::ok()
             }
+            Request::Session { on } => {
+                let mut st = lock.lock().unwrap();
+                let on = on.unwrap_or(st.session.is_none());
+                if on != st.session.is_some() {
+                    st.session = on.then(|| rh_core::model::Session {
+                        since: rh_core::now(),
+                        auto: false,
+                    });
+                    save_session(st.session.as_ref());
+                    st.wake = true;
+                    cv.notify_all();
+                }
+                let mut snap = st.snap.clone();
+                snap.session = st.session.clone();
+                snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, snap.session.as_ref());
+                Reply {
+                    snapshot: Some(Box::new(snap)),
+                    ..Reply::ok()
+                }
+            }
             Request::BoardVisible { visible } => {
                 let mut st = lock.lock().unwrap();
                 st.visible = visible;
@@ -283,8 +328,9 @@ fn sampler(shared: Shared) {
     let mut due = Instant::now();
     let mut was_visible = false;
     loop {
-        let (cfg, cfg_error, visible, switchyard) = {
+        let (cfg, cfg_error, visible, switchyard, session) = {
             let mut st = lock.lock().unwrap();
+            st.wake = false;
             let now_mtime = config_mtime();
             if now_mtime != mtime {
                 mtime = now_mtime;
@@ -297,6 +343,7 @@ fn sampler(shared: Shared) {
                 st.cfg_error.clone(),
                 st.visible,
                 st.switchyard.clone(),
+                st.session.clone(),
             )
         };
 
@@ -307,6 +354,8 @@ fn sampler(shared: Shared) {
             None
         };
         snap.lamp = lamp.update(&snap, &cfg.lamp);
+        snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, session.as_ref());
+        snap.session = session;
         snap.config_error = cfg_error;
         let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
         let ev = event_line(&Event::Snapshot {
@@ -331,7 +380,7 @@ fn sampler(shared: Shared) {
         was_visible = st.visible;
         let wait = due - now;
         let _ = cv
-            .wait_timeout_while(st, wait, |s| s.visible == was_visible)
+            .wait_timeout_while(st, wait, |s| s.visible == was_visible && !s.wake)
             .unwrap();
     }
 }
@@ -354,6 +403,8 @@ pub fn run() -> anyhow::Result<i32> {
             pending: None,
             board_started: None,
             switchyard: None,
+            session: load_session(),
+            wake: false,
         }),
         Condvar::new(),
     ));

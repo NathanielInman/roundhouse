@@ -101,6 +101,11 @@ pub fn style_file() -> PathBuf {
     config_dir().join("style.css")
 }
 
+/// The recording session, kept so it survives a daemon restart.
+pub fn session_file() -> PathBuf {
+    state_dir().join("session.json")
+}
+
 pub fn board_log() -> PathBuf {
     state_dir().join("board.log")
 }

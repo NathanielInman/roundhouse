@@ -44,6 +44,12 @@ pub enum Request {
     BoardVisible {
         visible: bool,
     },
+    /// Starts (`true`) or ends (`false`) a recording session; without `on`
+    /// it toggles. The reply carries the snapshot taken after the change.
+    Session {
+        #[serde(default)]
+        on: Option<bool>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

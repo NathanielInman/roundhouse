@@ -224,7 +224,32 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
 fn lamp_of(mut reasons: Vec<Reason>) -> Lamp {
     reasons.sort_by_key(|x| std::cmp::Reverse(x.level));
     let level = reasons.first().map(|x| x.level).unwrap_or(Level::Calm);
-    Lamp { level, reasons }
+    Lamp {
+        level,
+        reasons,
+        hold: None,
+    }
+}
+
+/// What `lamp.hold` says during a recording session.
+pub const SESSION_HOLD: &str = "a recording session is on";
+
+/// Rules about heat. More work only adds heat, and a part at its limit
+/// protects itself, so these never hold builds.
+fn about_heat(key: &str) -> bool {
+    ["cpu.", "gpu", "drive:"].iter().any(|p| key.starts_with(p))
+}
+
+/// Why heavy work should wait: a recording session, else the first act
+/// reason that more work would make worse.
+pub fn hold(lamp: &Lamp, session: Option<&crate::model::Session>) -> Option<String> {
+    if session.is_some() {
+        return Some(SESSION_HOLD.into());
+    }
+    lamp.reasons
+        .iter()
+        .find(|r| r.level == Level::Act && !about_heat(&r.key))
+        .map(|r| r.text.clone())
 }
 
 /// Works out the lamp from one snapshot, with no memory of earlier ones.
@@ -541,5 +566,29 @@ mod tests {
         assert_eq!(classify(93.0, 85.0, 95.0, Level::Act, 3.0), Level::Act);
         assert_eq!(classify(91.0, 85.0, 95.0, Level::Act, 3.0), Level::HeadsUp);
         assert_eq!(classify(81.0, 85.0, 95.0, Level::Act, 3.0), Level::Calm);
+    }
+
+    #[test]
+    fn holds_for_sessions_and_disks_but_not_heat() {
+        let mut s = Snapshot::default();
+        s.machine.cpu.throttling = true;
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.level, Level::Act);
+        assert_eq!(hold(&lamp, None), None);
+        let session = crate::model::Session::default();
+        assert_eq!(hold(&lamp, Some(&session)).as_deref(), Some(SESSION_HOLD));
+        s.disks.push(Disk {
+            name: "nvme0n1".into(),
+            filesystems: vec![fs("/data", 96, 4)],
+            ..Default::default()
+        });
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(hold(&lamp, None).as_deref(), Some("/data is 96% full"));
+    }
+
+    #[test]
+    fn hold_is_always_sent() {
+        let json = serde_json::to_string(&Lamp::default()).unwrap();
+        assert_eq!(json, r#"{"level":"calm","reasons":[],"hold":null}"#);
     }
 }

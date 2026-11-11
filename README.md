@@ -71,10 +71,14 @@ waits.
   click swaps one for the other from the same icon. While a heavy build runs
   or waits, the Machine tab and the bar tooltip say so in one line
   ("Switchyard is building storefront · 1 queued").
-- With Roundhouse running, Switchyard holds the next heavy build while the
-  lamp says act (memory stalling, a filesystem past 95%, a CPU or GPU at its
-  limit), and the waiting tile says why. It starts on its own once the lamp
-  calms down.
+- With Roundhouse running, Switchyard holds the next heavy build while
+  memory is stalling or a filesystem is past 95%, and the waiting tile says
+  why. It starts on its own once that clears. A hot CPU does not hold builds:
+  the build is what heats it.
+- `rh session on` starts a recording session: Switchyard starts no heavy
+  build until `rh session off` (or a click on the session line in the
+  drawer), and the lamp keeps its color. A heavy build in the middle of a take
+  is what makes audio stutter, even at nice 19.
 - The sibling contract is plain JSON lines over each daemon's socket, read
   loosely, so the two can be upgraded separately. It is written down in
   [docs/design.md](docs/design.md#siblings).
