@@ -90,6 +90,10 @@ pub struct Network {
     /// The default route, when there is one.
     #[serde(default)]
     pub route: Option<Route>,
+    /// The probes have run at least once, so a missing route means there is
+    /// none rather than that nobody has looked yet.
+    #[serde(default)]
+    pub probed: bool,
     /// The router, answering ICMP echo.
     #[serde(default)]
     pub gateway: Option<Reach>,

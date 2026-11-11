@@ -218,6 +218,11 @@ fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
                 ..Default::default()
             });
         }
+        None if !n.probed => rows.push(RowData {
+            name: "Route".into(),
+            detail: "looking".into(),
+            ..Default::default()
+        }),
         None => rows.push(RowData {
             name: "Route".into(),
             detail: "no default route".into(),

@@ -273,7 +273,7 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
     // The way out: route, router, internet, DNS. Each is said once, at the
     // first hop that fails.
     let n = &m.network;
-    if n.route.is_none() && n.links.iter().any(|l| l.up) {
+    if n.probed && n.route.is_none() && n.links.iter().any(|l| l.up) {
         r.push(
             "net.route".into(),
             Level::HeadsUp,
@@ -827,6 +827,7 @@ mod tests {
             ..Default::default()
         });
         n.route = Some(crate::model::Route::default());
+        n.probed = true;
         n.gateway = Some(reach("192.168.1.1", true));
         n.internet = Some(reach("1.1.1.1", false));
         n.dns = Some(reach("example.com", false));
@@ -850,6 +851,12 @@ mod tests {
             evaluate(&s, &LampConfig::default()).reasons[0].key,
             "net.route"
         );
+        // Before the first probe, a missing route is not news.
+        s.machine.network.probed = false;
+        assert!(evaluate(&s, &LampConfig::default())
+            .reasons
+            .iter()
+            .all(|r| r.key != "net.route"));
     }
 
     /// Every field and type in the checked-in lamp is still sent: Switchyard

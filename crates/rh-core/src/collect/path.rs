@@ -179,6 +179,8 @@ pub fn lookup(name: &str) -> Option<f32> {
 /// What the probe thread knows, shared with the sampler.
 #[derive(Debug, Default)]
 struct Known {
+    /// A round has finished.
+    done: bool,
     route: Option<Route>,
     gateway: Option<Reach>,
     internet: Option<Reach>,
@@ -238,6 +240,7 @@ impl Prober {
         deep: bool,
         plan: Plan,
     ) -> (
+        bool,
         Option<Route>,
         [Option<Reach>; 3],
         Option<crate::model::Tailscale>,
@@ -251,6 +254,7 @@ impl Prober {
         }
         let k = self.known.lock().unwrap();
         (
+            k.done,
             k.route.clone(),
             [k.gateway.clone(), k.internet.clone(), k.dns.clone()],
             k.tailscale.clone(),
@@ -274,6 +278,7 @@ fn probe_loop(known: Arc<Mutex<Known>>, deep: Arc<AtomicBool>, plan: Arc<Mutex<P
         let tailscale = super::tunnel::tailscale();
         {
             let mut k = known.lock().unwrap();
+            k.done = true;
             k.tailscale = tailscale;
             k.route = route.as_ref().map(|(iface, g)| Route {
                 iface: iface.clone(),

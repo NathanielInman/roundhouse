@@ -192,7 +192,8 @@ impl Collector {
             host: cfg.network.probe_host.clone(),
             name: cfg.network.probe_name.clone(),
         };
-        let (route, [gateway, internet, dns], tailscale) = self.path.sample(deep, plan);
+        let (probed, route, [gateway, internet, dns], tailscale) = self.path.sample(deep, plan);
+        network.probed = probed;
         network.tailscale = tailscale;
         network.route = route;
         network.gateway = gateway;

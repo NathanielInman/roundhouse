@@ -404,6 +404,7 @@ fn status(json: bool) -> Result<i32> {
             r.iface,
             if r.ipv6 { " (+IPv6)" } else { "" }
         ),
+        None if !n.probed => "route not probed yet".into(),
         None => "no default route".into(),
     }];
     if let Some(g) = &n.gateway {
