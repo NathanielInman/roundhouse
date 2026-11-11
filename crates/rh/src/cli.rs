@@ -342,6 +342,31 @@ fn status(json: bool) -> Result<i32> {
         net.push_str(&format!("  public {ip}"));
     }
     println!("{:<12}{net}", "network");
+    let reach = |r: &rh_core::model::Reach| match (r.ok, r.ms) {
+        (true, Some(ms)) => format!("{} {ms:.1} ms", r.target),
+        (true, None) => format!("{} (waiting)", r.target),
+        (false, _) if !r.ever => format!("{} (does not answer ping)", r.target),
+        (false, _) => format!("{} NOT ANSWERING", r.target),
+    };
+    let mut way = vec![match &n.route {
+        Some(r) => format!(
+            "route via {} on {}{}",
+            r.gateway,
+            r.iface,
+            if r.ipv6 { " (+IPv6)" } else { "" }
+        ),
+        None => "no default route".into(),
+    }];
+    if let Some(g) = &n.gateway {
+        way.push(format!("router {}", reach(g)));
+    }
+    if let Some(i) = &n.internet {
+        way.push(format!("internet {}", reach(i)));
+    }
+    if let Some(d) = &n.dns {
+        way.push(format!("dns {}", reach(d)));
+    }
+    println!("{:<12}{}", "", way.join("  "));
     for l in &n.links {
         let mut line = l.name.clone();
         if let Some(sp) = l.speed {

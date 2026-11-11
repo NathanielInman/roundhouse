@@ -78,6 +78,7 @@ at once, so the drawer never opens on old data for long.
 | NVIDIA | NVML, loaded at runtime once | every sample |
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
 | Network | `/sys/class/net/*/statistics`, `speed` and `carrier_changes` for interfaces with a `device` link (no loopback, bridges or veths), counted per interface so a replugged NIC never spikes the total; `/proc/net/wireless` for Wi-Fi signal | every sample |
+| Way out | `/proc/net/route` and `ipv6_route` for the default route; an ICMP echo to the gateway on an unprivileged ping socket; opt-in (`network.internet_check`), an echo to `probe_host` and a lookup of `probe_name` through the system resolver; each with a 2 s deadline and failed only after two misses in a row | on a helper thread, every 10 s open, 30 s closed |
 | Public IP | one plain HTTP `GET /ip` to ifconfig.co on a helper thread, opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
@@ -142,6 +143,7 @@ the drawer shows reasons as links to that tab.
 | Link speed | a link up below the best speed it negotiated since the daemon started (a bad cable) | |
 | Link errors | 10 receive or transmit errors in a minute (drops do not count; every LAN has them) | |
 | Link flaps | 2 down-and-up cycles in a minute | |
+| Way out | the first hop that fails: no default route while a link is up; the router not answering (only one that has answered before: some block ping); the internet not answering; DNS failing | |
 | Loud fans | a fan at `fan_loud_rpm` (1600) or a GPU fan at `fan_loud_pct` (60%), during a recording session only | |
 
 Read-only filesystems, stale shares and automount points never count.
@@ -276,7 +278,7 @@ lamp keeps its color: a session is not an alarm. The session is kept in
 `lamp.hold` is how Roundhouse tells a sibling that heavy work should wait.
 It is set by a session, or by the first `act` reason that more work would
 make worse (a filesystem, memory). Heat is never a hold: a build heats the
-CPU, and a part at its limit protects itself. The field is always sent
+CPU, and a part at its limit protects itself. Neither is the network. The field is always sent
 (`null` when clear), so a sibling can tell a calm answer from an older
 Roundhouse.
 

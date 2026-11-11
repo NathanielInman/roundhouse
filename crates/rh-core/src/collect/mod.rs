@@ -10,6 +10,7 @@ pub mod audio;
 pub mod gpu;
 pub mod hwmon;
 pub mod net;
+pub mod path;
 pub mod pipewire;
 pub mod procfs;
 pub mod storage;
@@ -62,6 +63,7 @@ pub struct Collector {
     /// Intel's package throttle count on the last sample.
     throttle_count: Option<u64>,
     pipewire: pipewire::Watcher,
+    path: path::Prober,
     /// Watch PipeWire even with the drawer closed (a recording session).
     pub watch_audio: bool,
 }
@@ -88,6 +90,7 @@ impl Collector {
             apps: vec![],
             throttle_count: None,
             pipewire: pipewire::Watcher::default(),
+            path: path::Prober::default(),
             watch_audio: false,
             times: VecDeque::with_capacity(HISTORY),
         }
@@ -168,7 +171,17 @@ impl Collector {
         };
 
         let gpus = self.gpus.sample(&temps);
-        let network = self.net.sample(deep, cfg.network.public_ip);
+        let mut network = self.net.sample(deep, cfg.network.public_ip);
+        let plan = path::Plan {
+            internet: cfg.network.internet_check,
+            host: cfg.network.probe_host.clone(),
+            name: cfg.network.probe_name.clone(),
+        };
+        let (route, [gateway, internet, dns]) = self.path.sample(deep, plan);
+        network.route = route;
+        network.gateway = gateway;
+        network.internet = internet;
+        network.dns = dns;
 
         // Storage: every sample while open, every 30 s for the lamp otherwise.
         if deep || self.disks_at.is_none_or(|t| t.elapsed() >= STORAGE_IDLE) {

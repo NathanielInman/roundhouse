@@ -67,6 +67,7 @@ struct StoragePage {
 struct NetworkPage {
     root: gtk::Box,
     links: Rows,
+    path: Rows,
 }
 
 pub struct Drawer {
@@ -141,6 +142,72 @@ fn set_temp(w: &gtk::Label, temp: Option<f32>, limit: TempLimit) {
     if let Some(t) = temp {
         w.add_css_class(limit.level(t).as_str());
     }
+}
+
+/// The way out, hop by hop: route, router, internet, DNS.
+fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
+    let mut rows = vec![];
+    let hop = |name: &str, r: &rh_core::model::Reach, detail: String| {
+        let (right, class) = match (r.ok, r.ms) {
+            (true, Some(ms)) => (format!("{ms:.1} ms"), "calm"),
+            (true, None) => ("waiting".to_string(), ""),
+            (false, _) if !r.ever => ("does not answer ping".to_string(), ""),
+            (false, _) => ("not answering".to_string(), "act"),
+        };
+        RowData {
+            name: name.into(),
+            detail,
+            right,
+            right_class: class,
+            ..Default::default()
+        }
+    };
+    match &n.route {
+        Some(route) => {
+            let v6 = if route.ipv6 {
+                "IPv4 and IPv6"
+            } else {
+                "IPv4 only"
+            };
+            rows.push(RowData {
+                name: "Route".into(),
+                detail: format!("via {} on {}", route.gateway, route.iface),
+                right: v6.into(),
+                ..Default::default()
+            });
+        }
+        None => rows.push(RowData {
+            name: "Route".into(),
+            detail: "no default route".into(),
+            right_class: "heads-up",
+            right: "nothing can leave".into(),
+            ..Default::default()
+        }),
+    }
+    if let Some(g) = &n.gateway {
+        rows.push(hop("Router", g, g.target.clone()));
+    }
+    if let Some(i) = &n.internet {
+        rows.push(hop("Internet", i, i.target.clone()));
+    }
+    if let Some(d) = &n.dns {
+        rows.push(hop("DNS", d, format!("looks up {}", d.target)));
+    }
+    if n.internet.is_none() {
+        rows.push(RowData {
+            name: "Internet".into(),
+            detail: "not checked (network.internet_check)".into(),
+            ..Default::default()
+        });
+    }
+    if let Some(ip) = &n.public_ip {
+        rows.push(RowData {
+            name: "Public IP".into(),
+            detail: ip.clone(),
+            ..Default::default()
+        });
+    }
+    rows
 }
 
 /// "48 kHz", "44.1 kHz".
@@ -394,11 +461,16 @@ impl Drawer {
         let lrows = Rows::new();
         let lcard = card("LINKS", "");
         lcard.append(&lrows.root);
+        let prows = Rows::new();
+        let pcard = card("WAY OUT", "");
+        pcard.append(&prows.root);
         let nroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        nroot.append(&pcard);
         nroot.append(&lcard);
         let network = NetworkPage {
             root: nroot,
             links: lrows,
+            path: prows,
         };
 
         let stack = gtk::Stack::new();
@@ -976,6 +1048,7 @@ impl Drawer {
             })
             .collect();
         self.network.links.set(&rows);
+        self.network.path.set(&path_rows(&s.machine.network));
     }
 
     fn render_storage(&self, s: &Snapshot, cfg: &Config) {

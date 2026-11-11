@@ -234,6 +234,7 @@ impl NetReader {
                 None
             },
             links,
+            ..Default::default()
         }
     }
 }

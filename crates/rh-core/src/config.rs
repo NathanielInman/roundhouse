@@ -219,6 +219,12 @@ pub struct NetworkConfig {
     pub public_ip: bool,
     /// `bytes` (kB/s, the default) or `bits` (Mb/s, like link speeds).
     pub units: String,
+    /// Also check past the router: an ICMP echo to `probe_host` and a DNS
+    /// lookup of `probe_name`, every 10 s while the drawer is open and every
+    /// 30 s otherwise. Off by default: it talks to the internet.
+    pub internet_check: bool,
+    pub probe_host: String,
+    pub probe_name: String,
 }
 
 impl Default for NetworkConfig {
@@ -226,6 +232,9 @@ impl Default for NetworkConfig {
         NetworkConfig {
             public_ip: false,
             units: "bytes".into(),
+            internet_check: false,
+            probe_host: "1.1.1.1".into(),
+            probe_name: "example.com".into(),
         }
     }
 }

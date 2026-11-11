@@ -270,6 +270,46 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
         }
     }
 
+    // The way out: route, router, internet, DNS. Each is said once, at the
+    // first hop that fails.
+    let n = &m.network;
+    if n.route.is_none() && n.links.iter().any(|l| l.up) {
+        r.push(
+            "net.route".into(),
+            Level::HeadsUp,
+            "network",
+            "no default route: nothing can leave this machine".into(),
+            Kind::Steady,
+        );
+    } else if let Some(g) = n.gateway.as_ref().filter(|g| !g.ok && g.ever) {
+        r.push(
+            "net.gateway".into(),
+            Level::HeadsUp,
+            "network",
+            format!("the router ({}) is not answering", g.target),
+            Kind::Steady,
+        );
+    } else if let Some(i) = n.internet.as_ref().filter(|i| !i.ok) {
+        r.push(
+            "net.internet".into(),
+            Level::HeadsUp,
+            "network",
+            format!(
+                "the router answers but the internet ({}) does not",
+                i.target
+            ),
+            Kind::Steady,
+        );
+    } else if let Some(d) = n.dns.as_ref().filter(|d| !d.ok) {
+        r.push(
+            "net.dns".into(),
+            Level::HeadsUp,
+            "network",
+            format!("the internet answers but DNS cannot find {}", d.target),
+            Kind::Steady,
+        );
+    }
+
     // Fans are noise in the take: worth a light only while recording.
     if s.session.is_some() {
         let mut loud: Vec<String> = m
@@ -326,10 +366,11 @@ fn lamp_of(mut reasons: Vec<Reason>) -> Lamp {
 /// What `lamp.hold` says during a recording session.
 pub const SESSION_HOLD: &str = "a recording session is on";
 
-/// Rules about heat. More work only adds heat, and a part at its limit
-/// protects itself, so these never hold builds.
-fn about_heat(key: &str) -> bool {
-    ["cpu.", "gpu", "drive:"].iter().any(|p| key.starts_with(p))
+/// Rules that more heavy work would make worse: a filling disk, memory.
+/// Heat is not one (the build is what heats the CPU, and a part at its limit
+/// protects itself), nor is the network.
+fn holds_builds(key: &str) -> bool {
+    ["fs:", "mem."].iter().any(|p| key.starts_with(p))
 }
 
 /// Why heavy work should wait: a recording session, else the first act
@@ -340,7 +381,7 @@ pub fn hold(lamp: &Lamp, session: Option<&crate::model::Session>) -> Option<Stri
     }
     lamp.reasons
         .iter()
-        .find(|r| r.level == Level::Act && !about_heat(&r.key))
+        .find(|r| r.level == Level::Act && holds_builds(&r.key))
         .map(|r| r.text.clone())
 }
 
@@ -723,6 +764,7 @@ mod tests {
             errors_minute: 3,
             ..Default::default()
         });
+        s.machine.network.route = Some(crate::model::Route::default());
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.reasons.len(), 1);
         assert_eq!(
@@ -730,5 +772,46 @@ mod tests {
             "eno1 linked at 100 Mb/s (it had 2.5 Gb/s): check the cable"
         );
         assert_eq!(lamp.reasons[0].tab, "network");
+    }
+
+    #[test]
+    fn the_first_failing_hop_is_named() {
+        let reach = |target: &str, ok: bool| crate::model::Reach {
+            target: target.into(),
+            ok,
+            ever: true,
+            ..Default::default()
+        };
+        let mut s = Snapshot::default();
+        let n = &mut s.machine.network;
+        n.links.push(crate::model::Link {
+            name: "eno1".into(),
+            up: true,
+            ..Default::default()
+        });
+        n.route = Some(crate::model::Route::default());
+        n.gateway = Some(reach("192.168.1.1", true));
+        n.internet = Some(reach("1.1.1.1", false));
+        n.dns = Some(reach("example.com", false));
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.reasons.len(), 1);
+        assert_eq!(
+            lamp.reasons[0].text,
+            "the router answers but the internet (1.1.1.1) does not"
+        );
+        // A router that never answered blocks ping; it is not down.
+        s.machine.network.gateway = Some(crate::model::Reach {
+            ever: false,
+            ..reach("192.168.1.1", false)
+        });
+        assert_eq!(
+            evaluate(&s, &LampConfig::default()).reasons[0].key,
+            "net.internet"
+        );
+        s.machine.network.route = None;
+        assert_eq!(
+            evaluate(&s, &LampConfig::default()).reasons[0].key,
+            "net.route"
+        );
     }
 }

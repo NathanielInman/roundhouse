@@ -66,6 +66,43 @@ pub struct Network {
     /// Each interface backed by a device, up or down.
     #[serde(default)]
     pub links: Vec<Link>,
+    /// The default route, when there is one.
+    #[serde(default)]
+    pub route: Option<Route>,
+    /// The router, answering ICMP echo.
+    #[serde(default)]
+    pub gateway: Option<Reach>,
+    /// An outside address (`network.internet_check`).
+    #[serde(default)]
+    pub internet: Option<Reach>,
+    /// A DNS lookup through the system resolver (`network.internet_check`).
+    #[serde(default)]
+    pub dns: Option<Reach>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Route {
+    pub iface: String,
+    pub gateway: String,
+    /// IPv6 has a default route too.
+    pub ipv6: bool,
+}
+
+/// One reachability probe.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Reach {
+    /// What was asked: an address or a name.
+    pub target: String,
+    /// False after two misses in a row.
+    pub ok: bool,
+    /// The last answer's round trip.
+    pub ms: Option<f32>,
+    /// Misses in a row.
+    pub misses: u32,
+    /// It has answered at least once. A router that never answers ping is
+    /// one that blocks it, not one that is down.
+    #[serde(default)]
+    pub ever: bool,
 }
 
 /// One network interface backed by a device (`eno1`, `wlp8s0`).
