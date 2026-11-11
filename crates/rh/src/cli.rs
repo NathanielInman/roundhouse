@@ -532,6 +532,19 @@ fn status(json: bool) -> Result<i32> {
             );
         }
     }
+    for h in &s.remotes {
+        let state = if h.online {
+            match h.reasons.first() {
+                Some((_, t)) => format!("{}: {t}", h.level.as_str()),
+                None => "calm".into(),
+            }
+        } else if h.ever {
+            "not answering".into()
+        } else {
+            "never answered".into()
+        };
+        println!("{:<12}{} ({})  {state}", "remote", h.name, h.addr);
+    }
     if !s.ports.is_empty() {
         println!("ports");
         for p in &s.ports {
@@ -856,6 +869,23 @@ fn doctor_setup() -> Result<i32> {
         "storage",
         &format!("{} disks and shares", s.disks.len()),
     );
+    if let Some(l) = &cfg.remote.listen {
+        match rh_core::remote::listen_addr(l) {
+            Ok(a) if cfg.remote.token.is_empty() => {
+                failed = true;
+                check(
+                    Some(false),
+                    "remote",
+                    &format!("listening on {a} but remote.token is empty, so nothing is served"),
+                )
+            }
+            Ok(a) => check(Some(true), "remote", &format!("serving the lamp on {a}")),
+            Err(e) => {
+                failed = true;
+                check(Some(false), "remote", &e)
+            }
+        }
+    }
     match rh_core::sibling::switchyard() {
         Some(y) => check(
             Some(true),

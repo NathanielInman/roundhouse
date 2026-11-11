@@ -39,6 +39,8 @@ struct State {
     auto: AutoSession,
     /// Take a sample now rather than at the next tick.
     wake: bool,
+    /// Other machines' lamps, kept by their own thread.
+    remotes: Vec<rh_core::model::RemoteHost>,
     /// The latest answer from Switchyard, kept by its own thread.
     switchyard: Option<rh_core::model::SwitchyardView>,
     bar_line: String,
@@ -380,6 +382,82 @@ fn sibling_watcher(shared: Shared) {
     }
 }
 
+/// Asks each machine in `remote.hosts` for its lamp, every 5 s while the
+/// drawer is open or a host is not answering, and every 15 s otherwise.
+fn remote_watcher(shared: Shared) {
+    let (lock, cv) = &*shared;
+    loop {
+        let (hosts, visible, prev) = {
+            let st = lock.lock().unwrap();
+            (st.cfg.remote.hosts.clone(), st.visible, st.remotes.clone())
+        };
+        let remotes: Vec<_> = hosts
+            .iter()
+            .map(|h| {
+                let view = rh_core::remote::ask(&h.addr, &h.token);
+                let before = prev.iter().find(|p| p.name == h.name);
+                rh_core::remote::fold(before, &h.name, &h.addr, view)
+            })
+            .collect();
+        // A host that is not answering is asked again sooner, so one that
+        // was starting or rebooting shows up quickly.
+        let missing = remotes.iter().any(|h| !h.online);
+        let mut st = lock.lock().unwrap();
+        // A host that changed its mind is news: sample now, not at the
+        // next tick.
+        let changed = st
+            .remotes
+            .iter()
+            .map(|h| (h.online, h.level))
+            .ne(remotes.iter().map(|h| (h.online, h.level)));
+        st.remotes = remotes;
+        if changed {
+            st.wake = true;
+            cv.notify_all();
+        }
+        let every = if visible || missing {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_secs(15)
+        };
+        let _ = cv
+            .wait_timeout_while(st, every, |s| s.visible == visible)
+            .unwrap();
+    }
+}
+
+/// Serves this machine's lamp to other machines on `remote.listen`.
+fn remote_server(shared: Shared, addr: std::net::SocketAddr) {
+    let listener = match std::net::TcpListener::bind(addr) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("rh: cannot serve the lamp on {addr}: {e}");
+            return;
+        }
+    };
+    eprintln!("rh: serving the lamp on {addr}");
+    let busy = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    for stream in listener.incoming().flatten() {
+        // A handful at a time; anyone past that waits for the next try.
+        if busy.load(std::sync::atomic::Ordering::Relaxed) >= 8 {
+            continue;
+        }
+        let (view, token) = {
+            let st = shared.0.lock().unwrap();
+            (
+                rh_core::remote::View::of(&st.snap),
+                st.cfg.remote.token.clone(),
+            )
+        };
+        let b = busy.clone();
+        b.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::thread::spawn(move || {
+            rh_core::remote::serve(stream, &token, &view);
+            b.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+}
+
 fn sampler(shared: Shared) {
     let mut collector = Collector::new();
     let mut mtime = config_mtime();
@@ -391,7 +469,7 @@ fn sampler(shared: Shared) {
     let mut due = Instant::now();
     let mut was_visible = false;
     loop {
-        let (cfg, cfg_error, visible, switchyard, watch) = {
+        let (cfg, cfg_error, visible, switchyard, watch, remotes) = {
             let mut st = lock.lock().unwrap();
             st.wake = false;
             let now_mtime = config_mtime();
@@ -407,6 +485,7 @@ fn sampler(shared: Shared) {
                 st.visible,
                 st.switchyard.clone(),
                 st.session().is_some(),
+                st.remotes.clone(),
             )
         };
 
@@ -423,6 +502,7 @@ fn sampler(shared: Shared) {
             st.session()
         };
         snap.session = session.clone();
+        snap.remotes = remotes;
         snap.siblings.switchyard = if cfg.siblings.switchyard {
             switchyard
         } else {
@@ -481,6 +561,7 @@ pub fn run() -> anyhow::Result<i32> {
             switchyard: None,
             session: load_session(),
             auto: AutoSession::default(),
+            remotes: vec![],
             wake: false,
         }),
         Condvar::new(),
@@ -490,6 +571,18 @@ pub fn run() -> anyhow::Result<i32> {
         std::thread::spawn(move || sampler(s));
         let s = shared.clone();
         std::thread::spawn(move || sibling_watcher(s));
+        let s = shared.clone();
+        std::thread::spawn(move || remote_watcher(s));
+        let listen = shared.0.lock().unwrap().cfg.remote.listen.clone();
+        if let Some(l) = listen {
+            match rh_core::remote::listen_addr(&l) {
+                Ok(addr) => {
+                    let s = shared.clone();
+                    std::thread::spawn(move || remote_server(s, addr));
+                }
+                Err(e) => eprintln!("rh: {e}"),
+            }
+        }
     }
     eprintln!(
         "rh: listening on {}",

@@ -323,6 +323,30 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
         );
     }
 
+    // Other machines: their lamp lights this one, under their name. A host
+    // that answered before and stopped is a heads-up of its own.
+    for h in &s.remotes {
+        if h.online {
+            if let Some((level, text)) = h.reasons.first() {
+                r.push(
+                    format!("remote:{}", h.name),
+                    *level,
+                    "network",
+                    format!("{}: {text}", h.name),
+                    Kind::Steady,
+                );
+            }
+        } else if h.ever {
+            r.push(
+                format!("remote:{}", h.name),
+                Level::HeadsUp,
+                "network",
+                format!("{} is not answering", h.name),
+                Kind::Steady,
+            );
+        }
+    }
+
     // Fans are noise in the take: worth a light only while recording.
     if s.session.is_some() {
         let mut loud: Vec<String> = m
@@ -867,5 +891,25 @@ mod tests {
         lamp.hold = hold(&lamp, None);
         let out = serde_json::to_value(&lamp).unwrap();
         covers(&fixture, &out, "lamp");
+    }
+
+    #[test]
+    fn other_machines_light_this_lamp_but_never_hold_builds() {
+        let mut s = Snapshot::default();
+        s.remotes.push(crate::model::RemoteHost {
+            name: "rime".into(),
+            online: true,
+            ever: true,
+            level: Level::Act,
+            reasons: vec![(Level::Act, "/mnt/tank is 96% full".into())],
+            ..Default::default()
+        });
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.level, Level::Act);
+        assert_eq!(lamp.reasons[0].text, "rime: /mnt/tank is 96% full");
+        assert_eq!(hold(&lamp, None), None);
+        s.remotes[0].online = false;
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.reasons[0].text, "rime is not answering");
     }
 }

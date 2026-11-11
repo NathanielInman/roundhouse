@@ -53,7 +53,7 @@ Roundhouse replaces.
 | Tab | What it answers |
 |---|---|
 | **Machine** | Why is it slow right now? CPU and GPU with sparklines, memory, pressure stall (PSI), which says whether anything is actually waiting, and network throughput across every real interface (renamed NICs need no config). Audio: PipeWire's quantum, latency, DSP load and dropouts per minute, each sound card that is playing or recording, and plugged-in MIDI devices. Memory by app, counted from each app's cgroup, so 40 Chrome processes read as one line. Scopes started with `systemd-run` or `lowprio` show their memory cap. |
-| **Network** | Is it the cable, the LAN or the internet? The way out hop by hop: the default route, whether the router answers and how fast, and (opt-in) whether the internet and DNS answer, with the lamp naming the first hop that fails. VPNs: WireGuard and other tunnels with their addresses and traffic, and Tailscale's state and peers when it runs. Each interface with its negotiated speed, how full it is, Wi-Fi signal, bad frames and link drops per minute. A link that renegotiates below its best speed (a bad cable) is a heads-up. |
+| **Network** | Is it the cable, the LAN or the internet? Other machines running Roundhouse (`[remote]`) light this lamp under their own name. The way out hop by hop: the default route, whether the router answers and how fast, and (opt-in) whether the internet and DNS answer, with the lamp naming the first hop that fails. VPNs: WireGuard and other tunnels with their addresses and traffic, and Tailscale's state and peers when it runs. Each interface with its negotiated speed, how full it is, Wi-Fi signal, bad frames and link drops per minute. A link that renegotiates below its best speed (a bad cable) is a heads-up. |
 | **Ports** | What is listening, and who can reach it? Every listening TCP port and UDP service with its process and the directory it runs in (which repo started that `:5173`), and whether it answers every interface, one address, or only this machine. A dev server open to the café Wi-Fi stands out. |
 | **Storage** | Where did my space go? Each physical disk with its model and NVMe temperature, and the filesystems on it. btrfs subvolumes and bind mounts fold into one line. Network shares are sized on a helper thread with a deadline, so a NAS that went away never stalls anything, and automount points that nobody has opened are listed without being woken. |
 | **Switchyard ↗** | Not a page: a link to the Switchyard board, shown only while Switchyard runs. Its dot says what Switchyard is doing (blue while it builds, red when something failed). A click or its number key closes the drawer and opens the board from the same icon. |
@@ -188,6 +188,14 @@ probe_name = "example.com"
 
 [siblings]
 switchyard = true
+
+[remote]
+# listen = "100.101.102.103"  # serve this lamp on one address (a tailnet IP); never 0.0.0.0
+# token = "long-random-string"
+# [[remote.hosts]]            # watch other machines' lamps
+# name = "rime"
+# addr = "100.64.0.5"
+# token = "their-token"
 
 [session]
 auto = false          # a recording app starts a recording session

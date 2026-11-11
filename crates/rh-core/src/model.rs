@@ -20,6 +20,9 @@ pub struct Snapshot {
     pub session: Option<Session>,
     #[serde(default)]
     pub audio: Audio,
+    /// Other machines' lamps (`remote.hosts`).
+    #[serde(default)]
+    pub remotes: Vec<RemoteHost>,
     /// Listening ports, widest exposure first. Filled while the drawer is
     /// open.
     #[serde(default)]
@@ -403,6 +406,25 @@ pub struct Lamp {
     /// so a sibling can tell a calm answer from an older Roundhouse.
     #[serde(default)]
     pub hold: Option<String>,
+}
+
+/// Another machine's lamp, read from its daemon.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct RemoteHost {
+    /// The name in the config.
+    pub name: String,
+    pub addr: String,
+    /// It answered the last time it was asked.
+    pub online: bool,
+    /// It has answered at least once since the daemon started.
+    pub ever: bool,
+    /// Its own host name.
+    pub hostname: String,
+    pub level: Level,
+    /// Its reasons, most urgent first.
+    pub reasons: Vec<(Level, String)>,
+    /// It is in a recording session.
+    pub session: bool,
 }
 
 /// A listening TCP port or bound UDP service port.

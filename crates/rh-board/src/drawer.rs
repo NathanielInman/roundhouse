@@ -74,6 +74,8 @@ struct NetworkPage {
     root: gtk::Box,
     links: Rows,
     path: Rows,
+    hosts: Rows,
+    hosts_card: gtk::Box,
 }
 
 pub struct Drawer {
@@ -554,13 +556,20 @@ impl Drawer {
         let prows = Rows::new();
         let pcard = card("WAY OUT", "");
         pcard.append(&prows.root);
+        let hrows = Rows::new();
+        let hcard = card("OTHER MACHINES", "");
+        hcard.append(&hrows.root);
+        hcard.set_visible(false);
         let nroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        nroot.append(&hcard);
         nroot.append(&pcard);
         nroot.append(&lcard);
         let network = NetworkPage {
             root: nroot,
             links: lrows,
             path: prows,
+            hosts: hrows,
+            hosts_card: hcard,
         };
 
         // ---- ports page
@@ -1153,6 +1162,41 @@ impl Drawer {
             .collect();
         self.network.links.set(&rows);
         self.network.path.set(&path_rows(&s.machine.network));
+        let hosts: Vec<RowData> = s
+            .remotes
+            .iter()
+            .map(|h| {
+                let (right, class) = if h.online {
+                    let words = h
+                        .reasons
+                        .first()
+                        .map(|(_, t)| t.clone())
+                        .unwrap_or_else(|| "calm".into());
+                    (words, h.level.as_str())
+                } else if h.ever {
+                    ("not answering".to_string(), "heads-up")
+                } else {
+                    ("never answered".to_string(), "")
+                };
+                let mut detail = if h.hostname.is_empty() {
+                    h.addr.clone()
+                } else {
+                    format!("{} · {}", h.hostname, h.addr)
+                };
+                if h.session {
+                    detail.push_str(" · recording");
+                }
+                RowData {
+                    name: h.name.clone(),
+                    detail,
+                    right,
+                    right_class: class,
+                    ..Default::default()
+                }
+            })
+            .collect();
+        self.network.hosts_card.set_visible(!hosts.is_empty());
+        self.network.hosts.set(&hosts);
     }
 
     fn render_storage(&self, s: &Snapshot, cfg: &Config) {

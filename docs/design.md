@@ -282,6 +282,25 @@ The `lamp` shape (`level`, `hold`, and `reasons` with `level`, `text`,
 `tab` and `key`) is
 part of the sibling contract: change it only by adding fields.
 
+## Other machines
+
+`remote.listen` makes a daemon serve a read-only view of itself (host name,
+lamp, recording session) over TCP on one address, port 7461 by default.
+`0.0.0.0` and `::` are refused: the address is meant to be private, such as
+a tailnet IP. Each connection sends one line,
+`{"cmd":"lamp","token":"..."}`, and gets `{"ok":true,"view":{...}}` back
+when the token matches `remote.token` (compared in constant time); nothing
+is served without a token. Reads and writes have a 2 s deadline, and at most
+eight connections are served at once. The listen address is read once, at
+daemon start.
+
+Each `[[remote.hosts]]` entry (`name`, `addr`, `token`) is asked on its own
+thread every 5 s while the drawer is open or a host is not answering,
+and every 15 s otherwise. A host's
+first reason lights this lamp at its level, under its name ("rime:
+/mnt/tank is 96% full"), and a host that answered before and stopped is a
+heads-up. Remote reasons never hold builds. The Network tab lists the hosts.
+
 ## History
 
 Each time what the lamp says changes (its level, which rules are lit at

@@ -9,6 +9,7 @@ pub mod lamp;
 pub mod model;
 pub mod paths;
 pub mod protocol;
+pub mod remote;
 pub mod sibling;
 pub mod transport;
 pub mod waybar;

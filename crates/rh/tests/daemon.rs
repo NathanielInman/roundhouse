@@ -18,11 +18,16 @@ struct Daemon {
 
 impl Daemon {
     fn start(name: &str) -> Daemon {
+        Daemon::with_config(name, "")
+    }
+
+    fn with_config(name: &str, config: &str) -> Daemon {
         let root = std::env::temp_dir().join(format!("rh-e2e-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         for d in ["run", "state", "config"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
+        std::fs::write(root.join("config/config.toml"), config).unwrap();
         let child = Command::new(env!("CARGO_BIN_EXE_rh"))
             .arg("daemon")
             .env("ROUNDHOUSE_RUNTIME_DIR", root.join("run"))
@@ -163,4 +168,44 @@ fn stopping_removes_the_socket() {
     unsafe { libc::kill(pid, libc::SIGTERM) };
     let _ = d.child.wait();
     assert!(!Path::new(&d.sock()).exists());
+}
+
+#[test]
+fn one_machine_reads_anothers_lamp() {
+    // A free loopback port for the serving daemon.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let _server = Daemon::with_config(
+        "remote-a",
+        &format!("[remote]\nlisten = \"127.0.0.1:{port}\"\ntoken = \"s3cret\"\n"),
+    );
+    let watcher = Daemon::with_config(
+        "remote-b",
+        &format!(
+            "[[remote.hosts]]\nname = \"a\"\naddr = \"127.0.0.1:{port}\"\ntoken = \"s3cret\"\n\n[[remote.hosts]]\nname = \"wrong\"\naddr = \"127.0.0.1:{port}\"\ntoken = \"guess\"\n"
+        ),
+    );
+    let start = Instant::now();
+    loop {
+        let s = watcher.request(r#"{"cmd":"snapshot"}"#);
+        let hosts = s["snapshot"]["remotes"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let a = hosts.iter().find(|h| h["name"] == "a");
+        if a.is_some_and(|h| h["online"] == true) {
+            let wrong = hosts.iter().find(|h| h["name"] == "wrong").unwrap();
+            assert_eq!(wrong["online"], false, "a bad token must not be served");
+            assert!(!a.unwrap()["hostname"].as_str().unwrap().is_empty());
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "never read the lamp: {s}"
+        );
+        std::thread::sleep(Duration::from_millis(200));
+    }
 }

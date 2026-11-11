@@ -15,6 +15,30 @@ pub struct Config {
     pub network: NetworkConfig,
     pub siblings: SiblingsConfig,
     pub session: SessionConfig,
+    pub remote: RemoteConfig,
+}
+
+/// Lamps across machines.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct RemoteConfig {
+    /// Serve this machine's lamp on one address (`100.101.102.103` or
+    /// `host:port`, port 7461 by default), such as its tailnet IP. Never
+    /// every interface. Read once, at daemon start.
+    pub listen: Option<String>,
+    /// Readers must send this. Nothing is served without one.
+    pub token: String,
+    /// Other machines to watch.
+    pub hosts: Vec<RemoteHostConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct RemoteHostConfig {
+    pub name: String,
+    /// `host` or `host:port`.
+    pub addr: String,
+    pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
