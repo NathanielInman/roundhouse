@@ -341,6 +341,14 @@ fn status(json: bool) -> Result<i32> {
     if let Some(ip) = &n.public_ip {
         net.push_str(&format!("  public {ip}"));
     }
+    if let Some(ip) = &n.public_ipv6 {
+        net.push_str(&format!("  {ip}"));
+    }
+    match n.nat_keeps_port {
+        Some(true) => net.push_str("  (NAT keeps ports)"),
+        Some(false) => net.push_str("  (NAT changes ports per peer)"),
+        None => {}
+    }
     println!("{:<12}{net}", "network");
     let reach = |r: &rh_core::model::Reach| match (r.ok, r.ms) {
         (true, Some(ms)) => format!("{} {ms:.1} ms", r.target),

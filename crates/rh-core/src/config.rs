@@ -214,9 +214,13 @@ impl LampConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct NetworkConfig {
-    /// Show the public IP. Off by default because it asks a third party
-    /// (ifconfig.co, over plain HTTP) once a minute while the drawer is open.
+    /// Show the public IP (and IPv6, and how the NAT maps ports). Off by
+    /// default because it asks third parties
+    /// (the `stun` servers) once a minute while the drawer is open.
     pub public_ip: bool,
+    /// STUN servers to ask (`host:port`). Two let the drawer say how the NAT
+    /// maps ports.
+    pub stun: Vec<String>,
     /// `bytes` (kB/s, the default) or `bits` (Mb/s, like link speeds).
     pub units: String,
     /// Also check past the router: an ICMP echo to `probe_host` and a DNS
@@ -231,6 +235,10 @@ impl Default for NetworkConfig {
     fn default() -> Self {
         NetworkConfig {
             public_ip: false,
+            stun: vec![
+                "stun.cloudflare.com:3478".into(),
+                "stun.l.google.com:19302".into(),
+            ],
             units: "bytes".into(),
             internet_check: false,
             probe_host: "1.1.1.1".into(),

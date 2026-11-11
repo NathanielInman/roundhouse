@@ -11,18 +11,15 @@
 use super::{push_hist, read, read_trim};
 use crate::model::{Link, Network};
 use std::collections::{HashMap, VecDeque};
-use std::io::{Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const IP_EVERY: Duration = Duration::from_secs(60);
-const IP_HOST: &str = "ifconfig.co";
 
 #[derive(Default)]
 struct IpState {
-    ip: Option<String>,
+    seen: super::stun::Seen,
     fetched: Option<Instant>,
     busy: bool,
 }
@@ -91,35 +88,8 @@ fn delta(now: u64, prev: u64) -> u64 {
     now.saturating_sub(prev)
 }
 
-/// Pulls the address out of an HTTP response whose body is just the IP.
-pub fn parse_ip_response(resp: &str) -> Option<String> {
-    let (head, body) = resp.split_once("\r\n\r\n")?;
-    if !head.starts_with("HTTP/1.1 200") && !head.starts_with("HTTP/1.0 200") {
-        return None;
-    }
-    let ip = body.trim();
-    ip.parse::<std::net::IpAddr>().ok().map(|_| ip.to_string())
-}
-
-fn fetch_ip() -> Option<String> {
-    let addr = (IP_HOST, 80)
-        .to_socket_addrs()
-        .ok()?
-        .find(|a| a.is_ipv4())?;
-    let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(3)).ok()?;
-    s.set_read_timeout(Some(Duration::from_secs(3))).ok()?;
-    let req = format!(
-        "GET /ip HTTP/1.1\r\nHost: {IP_HOST}\r\nUser-Agent: roundhouse/{}\r\nAccept: text/plain\r\nConnection: close\r\n\r\n",
-        env!("CARGO_PKG_VERSION")
-    );
-    s.write_all(req.as_bytes()).ok()?;
-    let mut buf = String::new();
-    s.take(4096).read_to_string(&mut buf).ok()?;
-    parse_ip_response(&buf)
-}
-
 impl NetReader {
-    fn refresh_ip(&self) {
+    fn refresh_ip(&self, servers: Vec<String>) {
         let mut st = self.ip.lock().unwrap();
         if st.busy || st.fetched.is_some_and(|t| t.elapsed() < IP_EVERY) {
             return;
@@ -127,17 +97,21 @@ impl NetReader {
         st.busy = true;
         let shared = self.ip.clone();
         std::thread::spawn(move || {
-            let ip = fetch_ip();
+            let seen = super::stun::discover(&servers);
             let mut st = shared.lock().unwrap();
             st.busy = false;
             st.fetched = Some(Instant::now());
-            if ip.is_some() {
-                st.ip = ip;
+            // Keep the last answer through a failed round.
+            if seen.v4.is_some() || seen.v6.is_some() {
+                st.seen = seen;
             }
         });
     }
 
-    pub fn sample(&mut self, deep: bool, public_ip: bool) -> Network {
+    /// `stun` is the servers to ask for the public address, or empty when
+    /// `network.public_ip` is off.
+    pub fn sample(&mut self, deep: bool, stun: &[String]) -> Network {
+        let public_ip = !stun.is_empty();
         let root = Path::new("/sys/class/net");
         let wireless = read("/proc/net/wireless")
             .map(|t| parse_wireless(&t))
@@ -216,8 +190,13 @@ impl NetReader {
             push_hist(&mut self.up, up as f32);
         }
         if public_ip && deep {
-            self.refresh_ip();
+            self.refresh_ip(stun.to_vec());
         }
+        let seen = if public_ip {
+            self.ip.lock().unwrap().seen.clone()
+        } else {
+            Default::default()
+        };
         Network {
             interfaces: ifaces
                 .iter()
@@ -228,11 +207,9 @@ impl NetReader {
             up,
             down_history: self.down.iter().copied().collect(),
             up_history: self.up.iter().copied().collect(),
-            public_ip: if public_ip {
-                self.ip.lock().unwrap().ip.clone()
-            } else {
-                None
-            },
+            public_ip: seen.v4.map(|a| a.to_string()),
+            public_ipv6: seen.v6.map(|a| a.to_string()),
+            nat_keeps_port: seen.same_port,
             links,
             ..Default::default()
         }
@@ -291,14 +268,6 @@ pub fn rate(bps: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ip_responses() {
-        let ok = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n203.0.113.42\n";
-        assert_eq!(parse_ip_response(ok).as_deref(), Some("203.0.113.42"));
-        assert!(parse_ip_response("HTTP/1.1 429 Too Many\r\n\r\nslow down").is_none());
-        assert!(parse_ip_response("HTTP/1.1 200 OK\r\n\r\n<html>").is_none());
-    }
 
     #[test]
     fn rates() {

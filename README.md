@@ -171,7 +171,8 @@ sustain = 30          # seconds at its limit before act (CPUs boost to it)
 release = 30          # seconds clear before the lamp falls
 
 [network]
-public_ip = false     # true asks ifconfig.co once a minute while the drawer is open
+public_ip = false     # true asks two STUN servers once a minute while the drawer is open
+stun = ["stun.cloudflare.com:3478", "stun.l.google.com:19302"]
 units = "bytes"       # or "bits": rates in Mb/s, like link speeds
 internet_check = false  # true pings probe_host and looks up probe_name
 probe_host = "1.1.1.1"

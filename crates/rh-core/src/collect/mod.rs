@@ -14,6 +14,7 @@ pub mod path;
 pub mod pipewire;
 pub mod procfs;
 pub mod storage;
+pub mod stun;
 
 use crate::config::Config;
 use crate::model::{AppUsage, Cpu, Disk, Host, Machine, Memory, Pressure, Snapshot};
@@ -171,7 +172,12 @@ impl Collector {
         };
 
         let gpus = self.gpus.sample(&temps);
-        let mut network = self.net.sample(deep, cfg.network.public_ip);
+        let stun = if cfg.network.public_ip {
+            cfg.network.stun.clone()
+        } else {
+            vec![]
+        };
+        let mut network = self.net.sample(deep, &stun);
         let plan = path::Plan {
             internet: cfg.network.internet_check,
             host: cfg.network.probe_host.clone(),

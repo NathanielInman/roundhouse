@@ -200,10 +200,20 @@ fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
             ..Default::default()
         });
     }
-    if let Some(ip) = &n.public_ip {
+    if n.public_ip.is_some() || n.public_ipv6.is_some() {
+        let ips: Vec<&str> = [&n.public_ip, &n.public_ipv6]
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect();
         rows.push(RowData {
             name: "Public IP".into(),
-            detail: ip.clone(),
+            detail: ips.join(" · "),
+            right: match n.nat_keeps_port {
+                Some(true) => "NAT keeps ports".into(),
+                Some(false) => "NAT changes ports per peer".into(),
+                None => String::new(),
+            },
             ..Default::default()
         });
     }

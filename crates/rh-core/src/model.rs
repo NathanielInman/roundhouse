@@ -61,8 +61,15 @@ pub struct Network {
     pub up: f64,
     pub down_history: Vec<f32>,
     pub up_history: Vec<f32>,
-    /// Only when `network.public_ip` is on.
+    /// Only when `network.public_ip` is on: the IPv4 address STUN servers see.
     pub public_ip: Option<String>,
+    /// The IPv6 address, when there is IPv6 to the internet.
+    #[serde(default)]
+    pub public_ipv6: Option<String>,
+    /// Two STUN servers saw the same port: the NAT keeps one mapping per
+    /// socket rather than one per destination.
+    #[serde(default)]
+    pub nat_keeps_port: Option<bool>,
     /// Each interface backed by a device, up or down.
     #[serde(default)]
     pub links: Vec<Link>,

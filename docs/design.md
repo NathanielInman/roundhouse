@@ -17,7 +17,8 @@ The README is the tour; this is the spec.
    comes from the bar.
 4. **Cheap when closed.** The daemon never starts subprocesses and samples
    only the lamp's inputs while the drawer is hidden. It talks to the
-   internet only when asked to (`network.public_ip`).
+   internet only when asked to (`network.public_ip`,
+   `network.internet_check`).
 5. **Siblings, not dependencies.** Switchyard and Roundhouse each unlock
    features in the other when both run, and neither needs the other.
 
@@ -79,7 +80,7 @@ at once, so the drawer never opens on old data for long.
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
 | Network | `/sys/class/net/*/statistics`, `speed` and `carrier_changes` for interfaces with a `device` link (no loopback, bridges or veths), counted per interface so a replugged NIC never spikes the total; `/proc/net/wireless` for Wi-Fi signal | every sample |
 | Way out | `/proc/net/route` and `ipv6_route` for the default route; an ICMP echo to the gateway on an unprivileged ping socket; opt-in (`network.internet_check`), an echo to `probe_host` and a lookup of `probe_name` through the system resolver; each with a 2 s deadline and failed only after two misses in a row | on a helper thread, every 10 s open, 30 s closed |
-| Public IP | one plain HTTP `GET /ip` to ifconfig.co on a helper thread, opt-in with `network.public_ip` | while open, at most once a minute |
+| Public IP | a STUN binding request (RFC 5389) to each `network.stun` server over IPv4 from one socket, and to the first over IPv6, on a helper thread; the reply must carry our random transaction ID. Two servers seeing the same port means the NAT keeps one mapping per socket. Opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
 | Audio streams | `/proc/asound/cards`, `card*/pcm*/sub*/status` and `hw_params` (running streams, rate, format, owner); `seq/clients` (MIDI devices) | every sample |
