@@ -13,7 +13,7 @@ optdepends=('nvidia-utils: NVIDIA GPU readings through NVML'
             'waybar: the bar the lamp lives in')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('117ea4c88acebc839f8d6ca016627e87cd0e82d9dd502e23fbdcb5e99b8ae424')
 
 prepare() {
   cd "$pkgname-$pkgver"

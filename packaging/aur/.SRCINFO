@@ -16,6 +16,6 @@ pkgbase = roundhouse
 	optdepends = pipewire: quantum, DSP load and dropouts on the Machine tab
 	optdepends = waybar: the bar the lamp lives in
 	source = roundhouse-0.3.0.tar.gz::https://github.com/NathanielInman/roundhouse/archive/v0.3.0.tar.gz
-	sha256sums = SKIP
+	sha256sums = 117ea4c88acebc839f8d6ca016627e87cd0e82d9dd502e23fbdcb5e99b8ae424
 
 pkgname = roundhouse
