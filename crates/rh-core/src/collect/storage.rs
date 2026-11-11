@@ -13,7 +13,7 @@ use super::{read, read_trim};
 use crate::model::{Disk, DiskKind, Filesystem};
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 const LOCAL: &[&str] = &[
@@ -44,6 +44,8 @@ const SKIP_UNDER: &[&str] = &[
 
 /// How long a share gets to report its size before the sample moves on.
 const NET_DEADLINE: Duration = Duration::from_millis(300);
+/// A share whose size query has been out this long is "not answering".
+const STALE_AFTER: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MountEntry {
@@ -168,51 +170,45 @@ pub struct Storage {
 }
 
 impl Storage {
-    /// Sizes a share on a helper thread. Returns the freshest answer and
-    /// whether the share has stopped answering.
-    fn net_size(&mut self, mount: &str) -> (Option<Sizes>, bool) {
-        if let Some(p) = self.probes.get(mount) {
-            match p.rx.try_recv() {
+    /// Sizes every share on its own helper thread, all under one deadline,
+    /// so three slow shares cost 300 ms, not 900. Returns each mount's
+    /// freshest size and whether it has stopped answering.
+    fn net_sizes(&mut self, mounts: &[String]) -> HashMap<String, (Option<Sizes>, bool)> {
+        let start = Instant::now();
+        for m in mounts {
+            if !self.probes.contains_key(m) {
+                let (tx, rx) = mpsc::channel();
+                let path = m.clone();
+                std::thread::spawn(move || {
+                    let _ = tx.send(statvfs(&path));
+                });
+                self.probes.insert(m.clone(), Probe { rx, since: start });
+            }
+        }
+        let deadline = start + NET_DEADLINE;
+        let mut out = HashMap::new();
+        for m in mounts {
+            let Some(p) = self.probes.get(m) else {
+                continue;
+            };
+            let left = deadline.saturating_duration_since(Instant::now());
+            let stale = match p.rx.recv_timeout(left) {
                 Ok(v) => {
-                    self.probes.remove(mount);
+                    self.probes.remove(m);
                     if let Some(v) = v {
-                        self.last.insert(mount.to_string(), v);
+                        self.last.insert(m.clone(), v);
                     }
-                    return (self.last.get(mount).copied(), false);
+                    false
                 }
-                Err(TryRecvError::Empty) => {
-                    let stale = p.since.elapsed() > Duration::from_secs(2);
-                    return (self.last.get(mount).copied(), stale);
+                Err(RecvTimeoutError::Timeout) => p.since.elapsed() > STALE_AFTER,
+                Err(RecvTimeoutError::Disconnected) => {
+                    self.probes.remove(m);
+                    true
                 }
-                Err(TryRecvError::Disconnected) => {
-                    self.probes.remove(mount);
-                }
-            }
+            };
+            out.insert(m.clone(), (self.last.get(m).copied(), stale));
         }
-        let (tx, rx) = mpsc::channel();
-        let m = mount.to_string();
-        std::thread::spawn(move || {
-            let _ = tx.send(statvfs(&m));
-        });
-        match rx.recv_timeout(NET_DEADLINE) {
-            Ok(v) => {
-                if let Some(v) = v {
-                    self.last.insert(mount.to_string(), v);
-                }
-                (self.last.get(mount).copied(), false)
-            }
-            Err(RecvTimeoutError::Timeout) => {
-                self.probes.insert(
-                    mount.to_string(),
-                    Probe {
-                        rx,
-                        since: Instant::now(),
-                    },
-                );
-                (self.last.get(mount).copied(), false)
-            }
-            Err(RecvTimeoutError::Disconnected) => (None, true),
-        }
+        out
     }
 
     pub fn sample(&mut self, hide: &[String], drive_temps: &[(String, Reading)]) -> Vec<Disk> {
@@ -259,7 +255,7 @@ impl Storage {
             slot.2 &= ro;
         }
 
-        let mut disks: BTreeMap<String, Disk> = BTreeMap::new();
+        let mut found = vec![];
         for (source, (fstype, mut mounts, readonly)) in by_source {
             mounts.retain(|m| !hide.contains(m));
             if mounts.is_empty() {
@@ -268,9 +264,20 @@ impl Storage {
             // The main mount: "/", else one showing the filesystem's root
             // (`/scratch`, not its `/tmp` bind), else the shortest path.
             mounts.sort_by_key(|m| (m != "/", !top.contains(&m.as_str()), m.len(), m.clone()));
+            found.push((source, fstype, mounts, readonly));
+        }
+        let shares: Vec<String> = found
+            .iter()
+            .filter(|f| NETWORK.contains(&f.1.as_str()))
+            .map(|f| f.2[0].clone())
+            .collect();
+        let mut net = self.net_sizes(&shares);
+
+        let mut disks: BTreeMap<String, Disk> = BTreeMap::new();
+        for (source, fstype, mounts, readonly) in found {
             let network = NETWORK.contains(&fstype.as_str());
             let (sizes, stale) = if network {
-                self.net_size(&mounts[0])
+                net.remove(&mounts[0]).unwrap_or((None, false))
             } else {
                 (statvfs(&mounts[0]), false)
             };

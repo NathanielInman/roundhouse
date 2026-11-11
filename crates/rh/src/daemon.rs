@@ -4,6 +4,11 @@
 //!
 //! It samples every second while the drawer is open and every five seconds
 //! while it is closed, when only the lamp and the pinned number need data.
+//!
+//! Nothing writes to a socket while holding the state lock: each subscriber
+//! has its own writer thread fed by a small queue, so a frozen drawer can
+//! never stall a snapshot reply. Switchyard is polled on its own thread for
+//! the same reason.
 
 use rh_core::collect::Collector;
 use rh_core::config::Config;
@@ -11,6 +16,7 @@ use rh_core::model::Snapshot;
 use rh_core::protocol::{Event, Reply, Request, SubKind};
 use rh_core::transport::{Listener, Stream};
 use std::io::{BufRead, BufReader, Write};
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -25,8 +31,10 @@ struct State {
     cfg_error: Option<String>,
     snap: Snapshot,
     visible: bool,
-    boards: Vec<Stream>,
-    bars: Vec<Stream>,
+    boards: Vec<Sub>,
+    bars: Vec<Sub>,
+    /// The latest answer from Switchyard, kept by its own thread.
+    switchyard: Option<rh_core::model::SwitchyardView>,
     bar_line: String,
     /// A show the drawer has not received yet because it is still starting.
     pending: Option<Event>,
@@ -35,6 +43,12 @@ struct State {
 
 type Shared = Arc<(Mutex<State>, Condvar)>;
 
+/// A subscriber: the queue its writer thread drains.
+type Sub = SyncSender<Arc<str>>;
+
+/// Lines a subscriber may fall behind before it misses some.
+const QUEUE: usize = 8;
+
 fn send_line(s: &mut Stream, line: &str) -> bool {
     s.write_all(line.as_bytes())
         .and_then(|_| s.write_all(b"\n"))
@@ -42,10 +56,30 @@ fn send_line(s: &mut Stream, line: &str) -> bool {
         .is_ok()
 }
 
-/// Writes to every subscriber and drops the ones that went away. Returns how
-/// many received it.
-fn broadcast(subs: &mut Vec<Stream>, line: &str) -> usize {
-    subs.retain_mut(|s| send_line(s, line));
+/// Gives a subscribed stream its own writer thread. The thread ends, and the
+/// queue disconnects, when a write fails or times out.
+fn subscriber(mut stream: Stream, first: &[String]) -> Option<Sub> {
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let (tx, rx) = sync_channel::<Arc<str>>(QUEUE);
+    for line in first {
+        tx.try_send(line.as_str().into()).ok()?;
+    }
+    std::thread::spawn(move || {
+        for line in rx {
+            if !send_line(&mut stream, &line) {
+                return;
+            }
+        }
+    });
+    Some(tx)
+}
+
+/// Queues a line for every subscriber without blocking, and drops the ones
+/// that went away. A subscriber whose queue is full skips this line. Returns
+/// how many are still subscribed.
+fn broadcast(subs: &mut Vec<Sub>, line: &str) -> usize {
+    let line: Arc<str> = line.into();
+    subs.retain(|s| !matches!(s.try_send(line.clone()), Err(TrySendError::Disconnected(_))));
     subs.len()
 }
 
@@ -155,31 +189,30 @@ fn handle(shared: Shared, stream: Stream) {
                 }
             }
             Request::Subscribe { kind } => {
-                let _ = writer.set_write_timeout(Some(Duration::from_secs(2)));
                 let mut st = lock.lock().unwrap();
                 match kind {
                     SubKind::Board => {
-                        let mut ok = send_line(
-                            &mut writer,
-                            &event_line(&Event::Snapshot {
-                                snapshot: Box::new(st.snap.clone()),
-                            }),
-                        );
+                        let mut first = vec![event_line(&Event::Snapshot {
+                            snapshot: Box::new(st.snap.clone()),
+                        })];
                         if let Some(p) = st.pending.take() {
-                            ok &= send_line(&mut writer, &event_line(&p));
+                            first.push(event_line(&p));
                         }
-                        if ok {
-                            st.boards.push(writer);
+                        if let Some(sub) = subscriber(writer, &first) {
+                            st.boards.push(sub);
                         }
                     }
                     SubKind::Bar => {
-                        let line = st.bar_line.clone();
-                        if line.is_empty() || send_line(&mut writer, &line) {
-                            st.bars.push(writer);
+                        let first: Vec<String> = Some(st.bar_line.clone())
+                            .filter(|l| !l.is_empty())
+                            .into_iter()
+                            .collect();
+                        if let Some(sub) = subscriber(writer, &first) {
+                            st.bars.push(sub);
                         }
                     }
                 }
-                // The stream now belongs to the subscriber list.
+                // The stream now belongs to its writer thread.
                 return;
             }
             Request::Toggle { anchor, tab } => {
@@ -212,15 +245,41 @@ fn handle(shared: Shared, stream: Stream) {
     }
 }
 
+/// Polls Switchyard every 2 s while the drawer is open and every 15 s while
+/// it is closed. A sibling that does not answer costs this thread its 300 ms
+/// deadline, never a sample.
+fn sibling_watcher(shared: Shared) {
+    let (lock, cv) = &*shared;
+    loop {
+        let (on, visible) = {
+            let st = lock.lock().unwrap();
+            (st.cfg.siblings.switchyard, st.visible)
+        };
+        let view = if on {
+            rh_core::sibling::switchyard()
+        } else {
+            None
+        };
+        let mut st = lock.lock().unwrap();
+        st.switchyard = view;
+        let every = if visible {
+            SIBLING_OPEN
+        } else {
+            SIBLING_CLOSED
+        };
+        let _ = cv
+            .wait_timeout_while(st, every, |s| s.visible == visible)
+            .unwrap();
+    }
+}
+
 fn sampler(shared: Shared) {
     let mut collector = Collector::new();
     let mut mtime = config_mtime();
-    let mut sibling = None;
-    let mut sibling_at: Option<Instant> = None;
     let mut lamp = rh_core::lamp::LampState::new();
+    let (lock, cv) = &*shared;
     loop {
-        let (lock, cv) = &*shared;
-        let (cfg, visible) = {
+        let (cfg, cfg_error, visible, switchyard) = {
             let mut st = lock.lock().unwrap();
             let now_mtime = config_mtime();
             if now_mtime != mtime {
@@ -229,31 +288,29 @@ fn sampler(shared: Shared) {
                 st.cfg = cfg;
                 st.cfg_error = err;
             }
-            (st.cfg.clone(), st.visible)
+            (
+                st.cfg.clone(),
+                st.cfg_error.clone(),
+                st.visible,
+                st.switchyard.clone(),
+            )
         };
 
         let mut snap = collector.sample(visible, &cfg);
-        let every = if visible {
-            SIBLING_OPEN
+        snap.siblings.switchyard = if cfg.siblings.switchyard {
+            switchyard
         } else {
-            SIBLING_CLOSED
+            None
         };
-        if !cfg.siblings.switchyard {
-            sibling = None;
-        } else if sibling_at.is_none_or(|t| t.elapsed() >= every) {
-            sibling = rh_core::sibling::switchyard();
-            sibling_at = Some(Instant::now());
-        }
-        snap.siblings.switchyard = sibling.clone();
         snap.lamp = lamp.update(&snap, &cfg.lamp);
+        snap.config_error = cfg_error;
+        let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
+        let ev = event_line(&Event::Snapshot {
+            snapshot: Box::new(snap.clone()),
+        });
 
         let mut st = lock.lock().unwrap();
-        snap.config_error = st.cfg_error.clone();
-        let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
         st.snap = snap;
-        let ev = event_line(&Event::Snapshot {
-            snapshot: Box::new(st.snap.clone()),
-        });
         broadcast(&mut st.boards, &ev);
         if bar != st.bar_line {
             st.bar_line = bar.clone();
@@ -285,12 +342,15 @@ pub fn run() -> anyhow::Result<i32> {
             bar_line: String::new(),
             pending: None,
             board_started: None,
+            switchyard: None,
         }),
         Condvar::new(),
     ));
     {
         let s = shared.clone();
         std::thread::spawn(move || sampler(s));
+        let s = shared.clone();
+        std::thread::spawn(move || sibling_watcher(s));
     }
     eprintln!(
         "rh: listening on {}",
