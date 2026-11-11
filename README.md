@@ -63,6 +63,9 @@ governor and EPP, whether PipeWire's data thread runs realtime, your realtime
 limit, kernel preemption and threaded IRQs, and USB autosuspend on each
 audio interface, each with its fix.
 
+`rh history` says what the lamp said while you were away (`--since 7d`,
+`--json`); the daemon keeps every change on disk.
+
 `rh status` prints the same thing in a terminal, and `rh status --json` gives
 it to scripts and agents.
 

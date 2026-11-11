@@ -279,6 +279,16 @@ The `lamp` shape (`level`, `hold`, and `reasons` with `level`, `text`,
 `tab` and `key`) is
 part of the sibling contract: change it only by adding fields.
 
+## History
+
+Each time what the lamp says changes (its level, which rules are lit at
+which level, the hold, the session) the daemon appends one JSON line to
+`$ROUNDHOUSE_STATE_DIR/history.jsonl`: time, level, reasons with their keys,
+hold and session. A reason whose number changes ("87°C" to "88°C") is not a
+change, and a calm start after a restart is not an event. Past 1 MiB the file
+moves to `history.1.jsonl` and a new one starts. `rh history [--since 24h]
+[--json]` prints it; the Timeline tab will read it.
+
 ## Recording sessions
 
 `rh session on` starts a recording session and `rh session off` ends it (the

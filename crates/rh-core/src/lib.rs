@@ -4,6 +4,7 @@
 
 pub mod collect;
 pub mod config;
+pub mod history;
 pub mod lamp;
 pub mod model;
 pub mod paths;
@@ -45,6 +46,46 @@ pub fn duration(secs: f64) -> String {
     }
 }
 
+/// "Nov 11 14:03" in local time.
+#[cfg(unix)]
+pub fn clock(t: f64) -> String {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let secs = t as libc::time_t;
+    // SAFETY: an all-zero tm is valid, and localtime_r only writes into it.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&secs, &mut tm) }.is_null() {
+        return format!("{t:.0}");
+    }
+    format!(
+        "{} {:>2} {:02}:{:02}",
+        MONTHS[tm.tm_mon.clamp(0, 11) as usize],
+        tm.tm_mday,
+        tm.tm_hour,
+        tm.tm_min
+    )
+}
+
+#[cfg(not(unix))]
+pub fn clock(t: f64) -> String {
+    format!("{t:.0}")
+}
+
+/// Parses "30m", "24h" or "7d" into seconds.
+pub fn parse_span(s: &str) -> Option<f64> {
+    let (n, unit) = s.split_at(s.len().checked_sub(1)?);
+    let n: f64 = n.parse().ok()?;
+    let mult = match unit {
+        "s" => 1.0,
+        "m" => 60.0,
+        "h" => 3600.0,
+        "d" => 86_400.0,
+        _ => return None,
+    };
+    Some(n * mult)
+}
+
 /// Unix time in seconds.
 pub fn now() -> f64 {
     std::time::SystemTime::now()
@@ -63,6 +104,15 @@ mod tests {
         assert_eq!(human(137 * 1024 * 1024 * 1024), "137 G");
         assert_eq!(human(6_600 * 1024 * 1024 * 1024), "6.4 T");
         assert_eq!(human(1536), "1.5 K");
+    }
+
+    #[test]
+    fn spans() {
+        assert_eq!(parse_span("24h"), Some(86_400.0));
+        assert_eq!(parse_span("7d"), Some(604_800.0));
+        assert_eq!(parse_span("30m"), Some(1800.0));
+        assert_eq!(parse_span("x"), None);
+        assert_eq!(parse_span(""), None);
     }
 
     #[test]

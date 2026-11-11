@@ -376,6 +376,7 @@ fn sampler(shared: Shared) {
     let mut collector = Collector::new();
     let mut mtime = config_mtime();
     let mut lamp = rh_core::lamp::LampState::new();
+    let mut history = rh_core::history::Recorder::new();
     let (lock, cv) = &*shared;
     // Ticks keep a fixed rate: the next one is due an interval after the
     // last was due, not an interval after the work finished.
@@ -422,6 +423,7 @@ fn sampler(shared: Shared) {
         snap.lamp = lamp.update(&snap, &cfg.lamp);
         snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, session.as_ref());
         snap.config_error = cfg_error;
+        history.record(&snap);
         let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
         let ev = event_line(&Event::Snapshot {
             snapshot: Box::new(snap.clone()),

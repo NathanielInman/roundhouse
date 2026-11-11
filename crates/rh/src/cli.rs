@@ -19,6 +19,7 @@ Usage:
   rh session [on|off|toggle]          a recording session: Switchyard holds heavy
                                       builds until it ends (no argument: show it)
   rh status [--json]                  print what the drawer shows
+  rh history [--since 24h] [--json]   what the lamp said, and when
   rh doctor [--audio]                 check the setup (--audio: is it fit to record?)
   rh daemon                           run the daemon in the foreground
   rh --version
@@ -64,6 +65,10 @@ pub fn run(args: &[String]) -> Result<i32> {
         }
         Some("status") => status(flag(rest, "--json")),
         Some("session") => session(rest.first().map(String::as_str)),
+        Some("history") => history(
+            value(rest, "--since").as_deref().unwrap_or("24h"),
+            flag(rest, "--json"),
+        ),
         Some("doctor") if flag(rest, "--audio") => doctor_audio(),
         Some("doctor") => doctor(),
         Some(other) => Err(anyhow!("unknown command `{other}` (try `rh --help`)")),
@@ -196,6 +201,42 @@ fn snapshot() -> (Snapshot, bool) {
     s.lamp = rh_core::lamp::evaluate(&s, &cfg.lamp);
     s.config_error = err;
     (s, false)
+}
+
+fn history(since: &str, json: bool) -> Result<i32> {
+    let span = rh_core::parse_span(since)
+        .ok_or_else(|| anyhow!("--since takes a span like 30m, 24h or 7d"))?;
+    let entries = rh_core::history::read(&rh_core::history::file(), rh_core::now() - span);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&entries)?);
+        return Ok(0);
+    }
+    if entries.is_empty() {
+        println!("nothing in the last {since}: the lamp stayed calm");
+        return Ok(0);
+    }
+    for e in entries {
+        let mut what = e
+            .reasons
+            .iter()
+            .map(|r| r.text.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        if e.session {
+            what = if what.is_empty() {
+                "recording session".into()
+            } else {
+                format!("{what} (recording session)")
+            };
+        }
+        if let Some(h) = &e.hold {
+            if !e.session {
+                what.push_str(&format!(" (builds held: {h})"));
+            }
+        }
+        println!("{}  {:<9} {what}", rh_core::clock(e.t), e.level.as_str());
+    }
+    Ok(0)
 }
 
 fn session_line(s: &Snapshot) -> String {
