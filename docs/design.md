@@ -107,9 +107,14 @@ was due, not after the work finished.
   path.
 - Filesystems group into their physical disk through device-mapper slaves and
   partition parents. The disk's model comes from `device/model`.
-- Network filesystems are sized on a helper thread with a 300 ms deadline. A
-  share that keeps the thread busy past two seconds is marked "not
-  answering" and keeps its last known size. It never counts toward the lamp.
+- Network filesystems are sized on helper threads, all under one 300 ms
+  deadline, and each answer records how long it took (over 300 ms is
+  "slow"). A share that keeps its thread busy past two seconds is marked
+  "not answering" and keeps its last known size. It never counts toward the
+  lamp. While it is stale, its server (`addr=` from the mount options, else
+  the host in the source) is pinged every 10 s, so the drawer can say "not
+  answering, but rime is up" (the share is the problem) or "rime is
+  unreachable" (the server or the network is).
 - An `autofs` mount point with nothing mounted on it is listed as "on
   demand" and is never touched.
 

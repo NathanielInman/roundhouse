@@ -284,9 +284,34 @@ pub struct Filesystem {
     /// The last size query did not answer in time (a share that went away).
     #[serde(default)]
     pub stale: bool,
+    /// How long the last answered size query took, for network shares.
+    #[serde(default)]
+    pub probe_ms: Option<f32>,
+    /// The server behind a network share.
+    #[serde(default)]
+    pub server: Option<String>,
+    /// While the share is stale: whether its server still answers ping.
+    #[serde(default)]
+    pub server_up: Option<bool>,
 }
 
 impl Filesystem {
+    /// What a stale share's state says: whether it is the share or the
+    /// server that went away.
+    pub fn stale_text(&self) -> String {
+        let server = self.server.as_deref().unwrap_or("the server");
+        match self.server_up {
+            Some(true) => format!("not answering, but {server} is up"),
+            Some(false) => format!("not answering: {server} is unreachable"),
+            None => "not answering".into(),
+        }
+    }
+
+    /// A share whose size query answered, but slowly.
+    pub fn slow(&self) -> bool {
+        self.probe_ms.is_some_and(|ms| ms > 300.0)
+    }
+
     pub fn used_pct(&self) -> f32 {
         let denom = self.used + self.avail;
         if denom == 0 {

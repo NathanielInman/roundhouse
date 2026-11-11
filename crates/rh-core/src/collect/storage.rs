@@ -56,6 +56,29 @@ pub struct MountEntry {
     pub opts: String,
     pub fstype: String,
     pub source: String,
+    /// For a network share, the server it talks to: `addr=` from the
+    /// filesystem's options, else the host in the source.
+    pub server: Option<String>,
+}
+
+/// The server behind a share: `addr=` in its super options (cifs and nfs
+/// put the resolved address there), else the host in `//host/share` or
+/// `host:/export`.
+pub fn share_server(source: &str, super_opts: &str) -> Option<String> {
+    if let Some(a) = super_opts.split(',').find_map(|o| o.strip_prefix("addr=")) {
+        return Some(a.to_string());
+    }
+    if let Some(rest) = source.strip_prefix("//") {
+        return rest
+            .split('/')
+            .next()
+            .filter(|h| !h.is_empty())
+            .map(String::from);
+    }
+    source
+        .split_once(":/")
+        .map(|(h, _)| h.to_string())
+        .filter(|h| !h.is_empty())
 }
 
 /// Decodes the octal escapes mountinfo uses for spaces and friends.
@@ -88,12 +111,18 @@ pub fn parse_mountinfo(text: &str) -> Vec<MountEntry> {
             if l.len() < 6 || r.len() < 2 {
                 return None;
             }
+            let source = unescape(r[1]);
+            let server = NETWORK
+                .contains(&r[0])
+                .then(|| share_server(&source, r.get(2).copied().unwrap_or("")))
+                .flatten();
             Some(MountEntry {
                 root: unescape(l[3]),
                 mount: unescape(l[4]),
                 opts: l[5].to_string(),
                 fstype: r[0].to_string(),
-                source: unescape(r[1]),
+                source,
+                server,
             })
         })
         .collect()
@@ -158,14 +187,36 @@ pub fn statvfs(_path: &str) -> Option<Sizes> {
 }
 
 struct Probe {
-    rx: Receiver<Option<Sizes>>,
+    /// The sizes and how long the query took, in milliseconds.
+    rx: Receiver<(Option<Sizes>, f32)>,
     since: Instant,
+}
+
+/// Whether a share's server answers ping, asked while the share is stale.
+#[derive(Default)]
+struct HostCheck {
+    rx: Option<Receiver<bool>>,
+    up: Option<bool>,
+    at: Option<Instant>,
+}
+
+/// How often a stale share's server is pinged.
+const HOST_EVERY: Duration = Duration::from_secs(10);
+
+/// What one share's size query came back with.
+struct NetSize {
+    sizes: Option<Sizes>,
+    stale: bool,
+    ms: Option<f32>,
 }
 
 #[derive(Default)]
 pub struct Storage {
     probes: HashMap<String, Probe>,
     last: HashMap<String, Sizes>,
+    /// How long each share's last answered query took.
+    took: HashMap<String, f32>,
+    hosts: HashMap<String, HostCheck>,
     models: HashMap<String, Option<String>>,
 }
 
@@ -173,14 +224,16 @@ impl Storage {
     /// Sizes every share on its own helper thread, all under one deadline,
     /// so three slow shares cost 300 ms, not 900. Returns each mount's
     /// freshest size and whether it has stopped answering.
-    fn net_sizes(&mut self, mounts: &[String]) -> HashMap<String, (Option<Sizes>, bool)> {
+    fn net_sizes(&mut self, mounts: &[String]) -> HashMap<String, NetSize> {
         let start = Instant::now();
         for m in mounts {
             if !self.probes.contains_key(m) {
                 let (tx, rx) = mpsc::channel();
                 let path = m.clone();
                 std::thread::spawn(move || {
-                    let _ = tx.send(statvfs(&path));
+                    let t = Instant::now();
+                    let sizes = statvfs(&path);
+                    let _ = tx.send((sizes, t.elapsed().as_secs_f32() * 1000.0));
                 });
                 self.probes.insert(m.clone(), Probe { rx, since: start });
             }
@@ -193,11 +246,12 @@ impl Storage {
             };
             let left = deadline.saturating_duration_since(Instant::now());
             let stale = match p.rx.recv_timeout(left) {
-                Ok(v) => {
+                Ok((v, ms)) => {
                     self.probes.remove(m);
                     if let Some(v) = v {
                         self.last.insert(m.clone(), v);
                     }
+                    self.took.insert(m.clone(), ms);
                     false
                 }
                 Err(RecvTimeoutError::Timeout) => p.since.elapsed() > STALE_AFTER,
@@ -206,9 +260,49 @@ impl Storage {
                     true
                 }
             };
-            out.insert(m.clone(), (self.last.get(m).copied(), stale));
+            out.insert(
+                m.clone(),
+                NetSize {
+                    sizes: self.last.get(m).copied(),
+                    stale,
+                    ms: self.took.get(m).copied(),
+                },
+            );
         }
         out
+    }
+
+    /// Whether `server` answers ping, checked on a helper thread at most
+    /// every 10 s; `None` until the first answer.
+    fn host_up(&mut self, server: &str) -> Option<bool> {
+        let h = self.hosts.entry(server.to_string()).or_default();
+        if let Some(rx) = &h.rx {
+            match rx.try_recv() {
+                Ok(up) => {
+                    h.up = Some(up);
+                    h.rx = None;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => h.rx = None,
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        if h.rx.is_none() && h.at.is_none_or(|t| t.elapsed() >= HOST_EVERY) {
+            let (tx, rx) = mpsc::channel();
+            let name = server.to_string();
+            std::thread::spawn(move || {
+                use std::net::ToSocketAddrs;
+                let up = (name.as_str(), 0)
+                    .to_socket_addrs()
+                    .ok()
+                    .and_then(|mut a| a.next())
+                    .and_then(|a| super::path::ping(a.ip()))
+                    .is_some();
+                let _ = tx.send(up);
+            });
+            h.rx = Some(rx);
+            h.at = Some(Instant::now());
+        }
+        h.up
     }
 
     pub fn sample(&mut self, hide: &[String], drive_temps: &[(String, Reading)]) -> Vec<Disk> {
@@ -232,6 +326,10 @@ impl Storage {
             .map(|e| e.mount.as_str())
             .collect();
         let mut on_demand = vec![];
+        let servers: HashMap<String, String> = entries
+            .iter()
+            .filter_map(|e| Some((e.source.clone(), e.server.clone()?)))
+            .collect();
         for e in &entries {
             if skipped(&e.mount) {
                 continue;
@@ -264,7 +362,8 @@ impl Storage {
             // The main mount: "/", else one showing the filesystem's root
             // (`/scratch`, not its `/tmp` bind), else the shortest path.
             mounts.sort_by_key(|m| (m != "/", !top.contains(&m.as_str()), m.len(), m.clone()));
-            found.push((source, fstype, mounts, readonly));
+            let server = servers.get(&source).cloned();
+            found.push((source, fstype, mounts, readonly, server));
         }
         let shares: Vec<String> = found
             .iter()
@@ -274,12 +373,20 @@ impl Storage {
         let mut net = self.net_sizes(&shares);
 
         let mut disks: BTreeMap<String, Disk> = BTreeMap::new();
-        for (source, fstype, mounts, readonly) in found {
+        for (source, fstype, mounts, readonly, server) in found {
             let network = NETWORK.contains(&fstype.as_str());
-            let (sizes, stale) = if network {
-                net.remove(&mounts[0]).unwrap_or((None, false))
+            let (sizes, stale, probe_ms) = if network {
+                match net.remove(&mounts[0]) {
+                    Some(n) => (n.sizes, n.stale, n.ms),
+                    None => (None, false, None),
+                }
             } else {
-                (statvfs(&mounts[0]), false)
+                (statvfs(&mounts[0]), false, None)
+            };
+            // A share that stopped answering: is its server there at all?
+            let host_up = match (&server, stale) {
+                (Some(s), true) => self.host_up(s),
+                _ => None,
             };
             let Some((total, used, avail)) = sizes else {
                 continue;
@@ -324,6 +431,9 @@ impl Storage {
                 avail,
                 readonly,
                 stale,
+                probe_ms,
+                server,
+                server_up: host_up,
             });
         }
 
@@ -394,11 +504,13 @@ mod tests {
                 mount: "/".into(),
                 opts: "rw,noatime".into(),
                 fstype: "btrfs".into(),
-                source: "/dev/nvme0n1p2".into()
+                source: "/dev/nvme0n1p2".into(),
+                server: None,
             }
         );
         assert_eq!(e[6].fstype, "cifs");
         assert_eq!(e[6].source, "//192.168.1.51/private");
+        assert_eq!(e[6].server.as_deref(), Some("192.168.1.51"));
         assert_eq!(e[7].mount, "/mnt/My Disk");
     }
 
@@ -408,5 +520,24 @@ mod tests {
         assert!(skipped("/run/user/1000/doc"));
         assert!(!skipped("/run/media/nate/usb"));
         assert!(!skipped("/home/nate/Rime"));
+    }
+
+    #[test]
+    fn share_servers() {
+        // cifs from a TrueNAS share, and NFS with and without addr=.
+        assert_eq!(
+            share_server(
+                "//192.168.1.51/private",
+                "rw,vers=3.1.1,cache=strict,addr=192.168.1.51,soft"
+            )
+            .as_deref(),
+            Some("192.168.1.51")
+        );
+        assert_eq!(share_server("//rime/media", "rw").as_deref(), Some("rime"));
+        assert_eq!(
+            share_server("rime:/mnt/tank", "rw,vers=4.2").as_deref(),
+            Some("rime")
+        );
+        assert_eq!(share_server("/dev/sda1", "rw"), None);
     }
 }

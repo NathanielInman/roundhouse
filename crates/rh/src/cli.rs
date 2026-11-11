@@ -475,7 +475,13 @@ fn status(json: bool) -> Result<i32> {
             } else {
                 String::new()
             };
-            let stale = if f.stale { "  (not answering)" } else { "" };
+            let stale = if f.stale {
+                format!("  ({})", f.stale_text())
+            } else if let Some(ms) = f.probe_ms {
+                format!("  ({ms:.0} ms{})", if f.slow() { ", slow" } else { "" })
+            } else {
+                String::new()
+            };
             println!(
                 "    {:<24}{:>8} / {:<8}{:>4.0}%{stale}",
                 format!("{}{extra}", paths_tilde(&f.mounts[0])),

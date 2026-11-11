@@ -1149,16 +1149,25 @@ impl Drawer {
                 };
                 let pct = f.used_pct();
                 let (right, right_class) = if f.stale {
-                    ("not answering".to_string(), "heads-up")
+                    (f.stale_text(), "heads-up")
+                } else if f.slow() {
+                    (
+                        format!("slow · {} / {} · {pct:.0}%", human(f.used), human(f.total)),
+                        "heads-up",
+                    )
                 } else {
                     (
                         format!("{} / {} · {pct:.0}%", human(f.used), human(f.total)),
                         "",
                     )
                 };
+                let detail = match f.probe_ms {
+                    Some(ms) => format!("{} · {ms:.0} ms", f.fstype),
+                    None => f.fstype.clone(),
+                };
                 rows.push(RowData {
                     name: format!("{}{more}", tilde(&f.mounts[0])),
-                    detail: f.fstype.clone(),
+                    detail,
                     right,
                     right_class,
                     meter: Some(pct as f64 / 100.0),
