@@ -136,6 +136,66 @@ pub fn read_from(root: &Path) -> Audio {
     }
 }
 
+/// The soft "Max realtime priority" from a `/proc/<pid>/limits` file.
+pub fn parse_rtprio_limit(limits: &str) -> Option<u32> {
+    let rest = limits
+        .lines()
+        .find_map(|l| l.strip_prefix("Max realtime priority"))?;
+    rest.split_whitespace().next()?.parse().ok()
+}
+
+/// A thread's name, realtime priority and scheduling policy from its `stat`
+/// file (policy 1 is SCHED_FIFO, 2 is SCHED_RR).
+pub fn parse_sched(stat: &str) -> Option<(String, u32, u32)> {
+    let open = stat.find('(')?;
+    let close = stat.rfind(')')?;
+    let name = stat.get(open + 1..close)?.to_string();
+    // Fields after the name start at field 3 (state); rt_priority is field
+    // 40 and policy 41.
+    let f: Vec<&str> = stat.get(close + 1..)?.split_whitespace().collect();
+    Some((name, f.get(37)?.parse().ok()?, f.get(38)?.parse().ok()?))
+}
+
+/// PipeWire's realtime thread, if it has one: (thread name, priority).
+/// `None` when PipeWire is not running; `Some(None)` when it runs without
+/// one.
+pub fn pipewire_rt() -> Option<Option<(String, u32)>> {
+    let rd = std::fs::read_dir("/proc").ok()?;
+    let pid = rd.flatten().find(|e| {
+        e.file_name()
+            .to_string_lossy()
+            .chars()
+            .all(|c| c.is_ascii_digit())
+            && read_trim(e.path().join("comm")).as_deref() == Some("pipewire")
+    })?;
+    let tasks = std::fs::read_dir(pid.path().join("task")).ok()?;
+    Some(tasks.flatten().find_map(|t| {
+        let (name, prio, policy) = parse_sched(&read(t.path().join("stat"))?)?;
+        (policy == 1 || policy == 2).then_some((name, prio))
+    }))
+}
+
+/// Each USB sound card and its USB power control (`on`, or `auto` when it
+/// may autosuspend).
+pub fn usb_power() -> Vec<(String, String)> {
+    let cards = read("/proc/asound/cards")
+        .map(|t| parse_cards(&t))
+        .unwrap_or_default();
+    cards
+        .into_iter()
+        .filter_map(|(num, name)| {
+            let dev = std::fs::canonicalize(format!("/sys/class/sound/card{num}/device")).ok()?;
+            // The card hangs off a USB interface (`5-2.4.2:1.0`); power is on
+            // its parent device.
+            if !dev.to_string_lossy().contains("/usb") {
+                return None;
+            }
+            let control = read_trim(dev.parent()?.join("power/control"))?;
+            Some((name, control))
+        })
+        .collect()
+}
+
 pub fn scan() -> Audio {
     read_from(Path::new("/proc/asound"))
 }
@@ -236,5 +296,19 @@ Client 142 : \"PipeWire-System\" [User Legacy]
         );
         assert_eq!(s.owner, None);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn realtime_facts() {
+        let limits = "Limit                     Soft Limit           Hard Limit           Units
+Max realtime priority     0                    0
+Max realtime timeout      unlimited            unlimited            us
+";
+        assert_eq!(parse_rtprio_limit(limits), Some(0));
+        // PipeWire's data loop on SCHED_RR at priority 20.
+        let stat = "2610696 (data-loop.0) S 768 2610689 2610689 0 -1 4194368 322 0 0 0 212 485 0 0 -21 0 3 0 14107628 123781120 6423 18446744073709551615 94290749247488 94290749249705 140726294410896 0 0 0 16386 4096 0 1 0 0 -1 11 20 2 0 0 0 94290749258736 94290749259792 94291020660736 140726294412289 140726294412307 140726294412307 140726294413286 0";
+        assert_eq!(parse_sched(stat), Some(("data-loop.0".to_string(), 20, 2)));
+        let normal = "2610689 (pipewire) S 768 2610689 2610689 0 -1 4194304 70005 0 6 0 524 568 0 0 9 -11 3 0 14107627 123781120 6423 18446744073709551615 94290749247488 94290749249705 140726294410896 0 0 0 16386 4096 0 0 0 0 17 1 0 0 0 0 0 94290749258736 94290749259792 94291020660736 140726294412289 140726294412307 140726294412307 140726294413286 0";
+        assert_eq!(parse_sched(normal), Some(("pipewire".to_string(), 0, 0)));
     }
 }

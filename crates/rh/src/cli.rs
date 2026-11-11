@@ -19,7 +19,7 @@ Usage:
   rh session [on|off|toggle]          a recording session: Switchyard holds heavy
                                       builds until it ends (no argument: show it)
   rh status [--json]                  print what the drawer shows
-  rh doctor                           check the setup
+  rh doctor [--audio]                 check the setup (--audio: is it fit to record?)
   rh daemon                           run the daemon in the foreground
   rh --version
 
@@ -64,6 +64,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         }
         Some("status") => status(flag(rest, "--json")),
         Some("session") => session(rest.first().map(String::as_str)),
+        Some("doctor") if flag(rest, "--audio") => doctor_audio(),
         Some("doctor") => doctor(),
         Some(other) => Err(anyhow!("unknown command `{other}` (try `rh --help`)")),
     }
@@ -441,7 +442,136 @@ fn check(ok: Option<bool>, what: &str, detail: &str) {
     }
 }
 
+fn sys(path: &str) -> Option<String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
+}
+
+/// Is the machine set up to record without dropouts? Every line is a fact
+/// and, where it matters, the fix.
+fn doctor_audio() -> Result<i32> {
+    use rh_core::collect::audio;
+    let mut failed = false;
+
+    // CPU frequency: a governor that ramps slowly costs small buffers.
+    let cpu = "/sys/devices/system/cpu/cpu0/cpufreq";
+    let governor = sys(&format!("{cpu}/scaling_governor"));
+    let epp = sys(&format!("{cpu}/energy_performance_preference"));
+    let driver = sys(&format!("{cpu}/scaling_driver")).unwrap_or_default();
+    match (governor.as_deref(), epp.as_deref()) {
+        (Some("performance"), _) | (_, Some("performance")) => check(
+            Some(true),
+            "CPU frequency",
+            &format!("{driver}, {} (clocks stay up)", epp.as_deref().or(governor.as_deref()).unwrap_or("-")),
+        ),
+        (Some(g), e) => check(
+            None,
+            "CPU frequency",
+            &format!(
+                "{driver}, governor {g}{}: fine for playback; for buffers under 128 samples set the EPP (or governor) to performance while recording",
+                e.map(|e| format!(", EPP {e}")).unwrap_or_default()
+            ),
+        ),
+        (None, _) => check(None, "CPU frequency", "no cpufreq; nothing to tune"),
+    }
+
+    // PipeWire's data thread must run realtime, or anything busy delays it.
+    match audio::pipewire_rt() {
+        Some(Some((thread, prio))) => check(
+            Some(true),
+            "PipeWire realtime",
+            &format!("{thread} runs realtime at priority {prio}"),
+        ),
+        Some(None) => {
+            failed = true;
+            check(
+                Some(false),
+                "PipeWire realtime",
+                "no realtime thread; check that rtkit is running or give your user an rtprio limit (the realtime-privileges group on Arch)",
+            )
+        }
+        None => check(None, "PipeWire realtime", "PipeWire is not running"),
+    }
+
+    // Apps that ask for realtime themselves (a DAW on JACK or ALSA).
+    let limit = sys("/proc/self/limits").and_then(|l| audio::parse_rtprio_limit(&l));
+    let rtkit = std::fs::read_dir("/proc").ok().is_some_and(|rd| {
+        rd.flatten().any(|e| {
+            sys(&format!("{}/comm", e.path().display())).as_deref() == Some("rtkit-daemon")
+        })
+    });
+    match (limit, rtkit) {
+        (Some(n), _) if n > 0 => check(Some(true), "realtime limit", &format!("apps may use priority {n}")),
+        (_, true) => check(
+            Some(true),
+            "realtime limit",
+            "0, but rtkit grants realtime to apps that ask (a DAW that wants more needs the realtime-privileges group)",
+        ),
+        _ => check(
+            None,
+            "realtime limit",
+            "0 and no rtkit: apps cannot get realtime; install realtime-privileges and add yourself to its group",
+        ),
+    }
+
+    // Kernel preemption and threaded interrupts.
+    let version = sys("/proc/sys/kernel/version").unwrap_or_default();
+    let cmdline = sys("/proc/cmdline").unwrap_or_default();
+    let has = |w: &str| cmdline.split_whitespace().any(|x| x == w);
+    if version.contains("PREEMPT_RT") {
+        check(Some(true), "kernel", "realtime kernel (PREEMPT_RT)");
+    } else if has("preempt=full") {
+        check(Some(true), "kernel", "full preemption (preempt=full)");
+    } else if version.contains("PREEMPT_DYNAMIC") {
+        check(
+            None,
+            "kernel",
+            "PREEMPT_DYNAMIC without preempt=full; add preempt=full to the kernel command line for lower latency",
+        );
+    } else {
+        check(None, "kernel", "no preemption flags found");
+    }
+    if has("threadirqs") || version.contains("PREEMPT_RT") {
+        check(Some(true), "threaded IRQs", "on");
+    } else {
+        check(
+            None,
+            "threaded IRQs",
+            "off; add threadirqs to the kernel command line so the sound card's interrupt can be prioritized",
+        );
+    }
+
+    // USB audio interfaces that may autosuspend drop out mid-take.
+    let usb = audio::usb_power();
+    if usb.is_empty() {
+        check(None, "USB audio", "no USB sound cards");
+    }
+    for (name, control) in usb {
+        if control == "on" {
+            check(Some(true), &name, "USB autosuspend off");
+        } else {
+            check(
+                None,
+                &name,
+                &format!("USB power/control is {control}: it may autosuspend; a udev rule setting it to on keeps it awake"),
+            );
+        }
+    }
+    Ok(if failed { 1 } else { 0 })
+}
+
 fn doctor() -> Result<i32> {
+    let r = doctor_setup();
+    check(
+        None,
+        "audio",
+        "`rh doctor --audio` checks whether the machine is fit to record",
+    );
+    r
+}
+
+fn doctor_setup() -> Result<i32> {
     let mut failed = false;
     let (cfg, err) = Config::load();
     match err {

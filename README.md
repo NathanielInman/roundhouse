@@ -56,6 +56,11 @@ Roundhouse replaces.
 | **Storage** | Where did my space go? Each physical disk with its model and NVMe temperature, and the filesystems on it. btrfs subvolumes and bind mounts fold into one line. Network shares are sized on a helper thread with a deadline, so a NAS that went away never stalls anything, and automount points that nobody has opened are listed without being woken. |
 | **Switchyard ↗** | Not a page: a link to the Switchyard board, shown only while Switchyard runs. Its dot says what Switchyard is doing (blue while it builds, red when something failed). A click or its number key closes the drawer and opens the board from the same icon. |
 
+`rh doctor --audio` says whether the machine is fit to record: the CPU
+governor and EPP, whether PipeWire's data thread runs realtime, your realtime
+limit, kernel preemption and threaded IRQs, and USB autosuspend on each
+audio interface, each with its fix.
+
 `rh status` prints the same thing in a terminal, and `rh status --json` gives
 it to scripts and agents.
 
