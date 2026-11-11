@@ -29,10 +29,11 @@ const YARD_PHASES: [&str; 7] = [
     "idle", "queued", "waiting", "building", "running", "ok", "failed",
 ];
 
-const TABS: [(&str, &str); 4] = [
+const TABS: [(&str, &str); 5] = [
     ("machine", "Machine"),
     ("storage", "Storage"),
     ("network", "Network"),
+    ("ports", "Ports"),
     ("switchyard", "Switchyard"),
 ];
 
@@ -64,6 +65,11 @@ struct StoragePage {
     rows: Rows,
 }
 
+struct PortsPage {
+    root: gtk::Box,
+    rows: Rows,
+}
+
 struct NetworkPage {
     root: gtk::Box,
     links: Rows,
@@ -91,6 +97,7 @@ pub struct Drawer {
     machine: MachinePage,
     storage: StoragePage,
     network: NetworkPage,
+    ports: PortsPage,
     /// The dot on the Switchyard link, colored by Switchyard's phase.
     yard_dot: gtk::Label,
     foot: gtk::Label,
@@ -142,6 +149,39 @@ fn set_temp(w: &gtk::Label, temp: Option<f32>, limit: TempLimit) {
     if let Some(t) = temp {
         w.add_css_class(limit.level(t).as_str());
     }
+}
+
+/// Listening ports, widest exposure first.
+fn port_rows(ports: &[rh_core::model::Port]) -> Vec<RowData> {
+    if ports.is_empty() {
+        return vec![RowData {
+            name: "Nothing listening".into(),
+            ..Default::default()
+        }];
+    }
+    ports
+        .iter()
+        .map(|p| {
+            let who = match (&p.process, &p.cwd) {
+                (Some(proc_), Some(cwd)) => format!("{proc_} · {}", tilde(cwd)),
+                (Some(proc_), None) => proc_.clone(),
+                (None, _) if p.uid == 0 => "system".into(),
+                (None, _) => format!("uid {}", p.uid),
+            };
+            let (right, class) = match p.exposure.as_str() {
+                "all" => ("every interface".to_string(), "heads-up"),
+                "address" => (p.addr.clone(), ""),
+                _ => ("this machine".to_string(), "calm"),
+            };
+            RowData {
+                name: format!(":{}{}", p.port, if p.proto == "udp" { " udp" } else { "" }),
+                detail: who,
+                right,
+                right_class: class,
+                ..Default::default()
+            }
+        })
+        .collect()
 }
 
 /// The way out, hop by hop: route, router, internet, DNS.
@@ -523,6 +563,17 @@ impl Drawer {
             path: prows,
         };
 
+        // ---- ports page
+        let porows = Rows::new();
+        let pocard = card("LISTENING", "WHO CAN REACH IT");
+        pocard.append(&porows.root);
+        let poroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        poroot.append(&pocard);
+        let ports = PortsPage {
+            root: poroot,
+            rows: porows,
+        };
+
         let stack = gtk::Stack::new();
         stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
         stack.set_transition_duration(220);
@@ -532,6 +583,7 @@ impl Drawer {
             ("machine", &machine.root),
             ("storage", &storage.root),
             ("network", &network.root),
+            ("ports", &ports.root),
         ] {
             stack.add_named(page, Some(id));
         }
@@ -585,6 +637,7 @@ impl Drawer {
             machine,
             storage,
             network,
+            ports,
             yard_dot,
             foot,
         });
@@ -851,6 +904,7 @@ impl Drawer {
         self.render_machine(s, &cfg);
         self.render_storage(s, &cfg);
         self.render_network(s, &cfg);
+        self.ports.rows.set(&port_rows(&s.ports));
         let n_tabs = self.tabs.iter().filter(|(_, b)| b.is_visible()).count();
         self.foot
             .set_label(&format!("1-{n_tabs} tabs · Esc close · {}", s.host.os));

@@ -12,6 +12,7 @@ pub mod hwmon;
 pub mod net;
 pub mod path;
 pub mod pipewire;
+pub mod ports;
 pub mod procfs;
 pub mod storage;
 pub mod stun;
@@ -28,6 +29,9 @@ pub const HISTORY: usize = 60;
 /// Storage is re-read this often while the drawer is closed (it only feeds
 /// the lamp then).
 const STORAGE_IDLE: Duration = Duration::from_secs(30);
+
+/// Ports are re-read this often while the drawer is open.
+const PORTS_EVERY: Duration = Duration::from_secs(5);
 
 pub(crate) fn push_hist(h: &mut VecDeque<f32>, v: f32) {
     if h.len() == HISTORY {
@@ -60,6 +64,8 @@ pub struct Collector {
     disks: Vec<Disk>,
     disks_at: Option<Instant>,
     apps: Vec<AppUsage>,
+    ports: Vec<crate::model::Port>,
+    ports_at: Option<Instant>,
     /// When each recent sample was taken.
     times: VecDeque<f64>,
     /// Intel's package throttle count on the last sample.
@@ -90,6 +96,8 @@ impl Collector {
             disks: vec![],
             disks_at: None,
             apps: vec![],
+            ports: vec![],
+            ports_at: None,
             throttle_count: None,
             pipewire: pipewire::Watcher::default(),
             path: path::Prober::default(),
@@ -198,6 +206,12 @@ impl Collector {
         }
         if deep {
             self.apps = apps::sample(8);
+            // Walking every process's sockets costs more than the rest of a
+            // sample, so ports refresh every few seconds.
+            if self.ports_at.is_none_or(|t| t.elapsed() >= PORTS_EVERY) {
+                self.ports = ports::scan();
+                self.ports_at = Some(Instant::now());
+            }
         }
 
         let mut audio = audio::scan();
@@ -229,6 +243,7 @@ impl Collector {
             disks: self.disks.clone(),
             apps: if deep { self.apps.clone() } else { vec![] },
             audio,
+            ports: if deep { self.ports.clone() } else { vec![] },
             now,
             ..Default::default()
         }

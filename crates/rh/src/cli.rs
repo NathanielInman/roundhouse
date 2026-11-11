@@ -491,6 +491,27 @@ fn status(json: bool) -> Result<i32> {
             );
         }
     }
+    if !s.ports.is_empty() {
+        println!("ports");
+        for p in &s.ports {
+            let who = match (&p.process, &p.cwd) {
+                (Some(proc_), Some(cwd)) => format!("{proc_} in {}", paths_tilde(cwd)),
+                (Some(proc_), None) => proc_.clone(),
+                (None, _) if p.uid == 0 => "system".into(),
+                (None, _) => format!("uid {}", p.uid),
+            };
+            let exp = match p.exposure.as_str() {
+                "all" => "EVERY INTERFACE".to_string(),
+                "address" => p.addr.clone(),
+                _ => "this machine".to_string(),
+            };
+            println!(
+                "    {:<10}{:<18}{who}",
+                format!(":{}{}", p.port, if p.proto == "udp" { "/udp" } else { "" }),
+                exp
+            );
+        }
+    }
     if !s.apps.is_empty() {
         println!("apps");
         for a in s.apps.iter().take(6) {

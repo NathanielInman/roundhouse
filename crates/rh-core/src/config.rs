@@ -85,6 +85,7 @@ impl Default for DrawerConfig {
                 "machine".into(),
                 "storage".into(),
                 "network".into(),
+                "ports".into(),
                 "switchyard".into(),
             ],
         }

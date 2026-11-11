@@ -54,6 +54,7 @@ Roundhouse replaces.
 |---|---|
 | **Machine** | Why is it slow right now? CPU and GPU with sparklines, memory, pressure stall (PSI), which says whether anything is actually waiting, and network throughput across every real interface (renamed NICs need no config). Audio: PipeWire's quantum, latency, DSP load and dropouts per minute, each sound card that is playing or recording, and plugged-in MIDI devices. Memory by app, counted from each app's cgroup, so 40 Chrome processes read as one line. Scopes started with `systemd-run` or `lowprio` show their memory cap. |
 | **Network** | Is it the cable, the LAN or the internet? The way out hop by hop: the default route, whether the router answers and how fast, and (opt-in) whether the internet and DNS answer, with the lamp naming the first hop that fails. VPNs: WireGuard and other tunnels with their addresses and traffic, and Tailscale's state and peers when it runs. Each interface with its negotiated speed, how full it is, Wi-Fi signal, bad frames and link drops per minute. A link that renegotiates below its best speed (a bad cable) is a heads-up. |
+| **Ports** | What is listening, and who can reach it? Every listening TCP port and UDP service with its process and the directory it runs in (which repo started that `:5173`), and whether it answers every interface, one address, or only this machine. A dev server open to the café Wi-Fi stands out. |
 | **Storage** | Where did my space go? Each physical disk with its model and NVMe temperature, and the filesystems on it. btrfs subvolumes and bind mounts fold into one line. Network shares are sized on a helper thread with a deadline, so a NAS that went away never stalls anything, and automount points that nobody has opened are listed without being woken. |
 | **Switchyard ↗** | Not a page: a link to the Switchyard board, shown only while Switchyard runs. Its dot says what Switchyard is doing (blue while it builds, red when something failed). A click or its number key closes the drawer and opens the board from the same icon. |
 
@@ -132,8 +133,8 @@ the bar can color it:
 #custom-roundhouse.act { color: #bf616a; }
 ```
 
-In the drawer, <kbd>1</kbd>-<kbd>3</kbd> or <kbd>Tab</kbd> switch tabs,
-<kbd>4</kbd> opens the Switchyard board while it runs, and <kbd>Esc</kbd> or
+In the drawer, <kbd>1</kbd>-<kbd>4</kbd> or <kbd>Tab</kbd> switch tabs,
+<kbd>5</kbd> opens the Switchyard board while it runs, and <kbd>Esc</kbd> or
 a click outside closes it.
 
 ## Config
@@ -153,7 +154,7 @@ from = "waybar"       # or "none" for the built-in theme
 
 [drawer]
 width = 460
-tabs = ["machine", "storage", "network", "switchyard"]  # switchyard is the link to its board
+tabs = ["machine", "storage", "network", "ports", "switchyard"]  # switchyard is the link to its board
 
 [storage]
 hide = ["/boot"]      # mount points to leave out
@@ -207,8 +208,7 @@ samples every second and adds memory by app.
 2. **Timeline:** what happened while I was away? OOM kills, thermal spikes,
    shares dropping and updates, folded into episodes the way Switchyard's
    History is.
-3. **Ports and Dev:** which process holds `:5173` and which repo started it;
-   repos with unpushed work; containers.
+3. **Dev:** repos with unpushed work; containers.
 4. **Script widgets:** any waybar custom-module script as a widget, unchanged.
 5. **macOS and Windows** through a tray app, as Switchyard does.
 

@@ -20,6 +20,10 @@ pub struct Snapshot {
     pub session: Option<Session>,
     #[serde(default)]
     pub audio: Audio,
+    /// Listening ports, widest exposure first. Filled while the drawer is
+    /// open.
+    #[serde(default)]
+    pub ports: Vec<Port>,
     /// Unix seconds when the sample was taken.
     pub now: f64,
 }
@@ -399,6 +403,25 @@ pub struct Lamp {
     /// so a sibling can tell a calm answer from an older Roundhouse.
     #[serde(default)]
     pub hold: Option<String>,
+}
+
+/// A listening TCP port or bound UDP service port.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Port {
+    /// `tcp` or `udp`.
+    pub proto: String,
+    pub port: u16,
+    /// The address it is bound to.
+    pub addr: String,
+    /// `all` (every interface), `address` (one interface) or `loopback`
+    /// (this machine only).
+    pub exposure: String,
+    pub uid: u32,
+    /// The process holding it, when it is ours to look at.
+    pub pid: Option<u32>,
+    pub process: Option<String>,
+    /// The directory the process runs in: which repo started it.
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

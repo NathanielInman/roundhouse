@@ -85,6 +85,7 @@ at once, so the drawer never opens on old data for long.
 | Public IP | a STUN binding request (RFC 5389) to each `network.stun` server over IPv4 from one socket, and to the first over IPv6, on a helper thread; the reply must carry our random transaction ID. Two servers seeing the same port means the NAT keeps one mapping per socket. Opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
+| Ports | `/proc/net/{tcp,tcp6}` listeners and `/proc/net/{udp,udp6}` bound service sockets (below 32768, no peer); socket inodes matched to `/proc/*/fd` for the process, `/proc/<pid>/cwd` for its directory; exposure from the bound address (`0.0.0.0`/`::` every interface, loopback, or one address); IPv4 and IPv6 fold together | while open, every 5 s |
 | Audio streams | `/proc/asound/cards`, `card*/pcm*/sub*/status` and `hw_params` (running streams, rate, format, owner); `seq/clients` (MIDI devices) | every sample |
 | PipeWire | its native socket (`$XDG_RUNTIME_DIR/pipewire-0`), spoken directly: bind the profiler, read quantum, DSP load and xrun counts | on a helper thread while open or during a recording session |
 | Switchyard | its socket | every 2 s open, 15 s closed |
