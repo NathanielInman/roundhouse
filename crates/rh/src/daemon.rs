@@ -452,6 +452,7 @@ fn sampler(shared: Shared) {
 
 pub fn run() -> anyhow::Result<i32> {
     let listener = Listener::bind()?;
+    listener.cleanup_on_signal();
     let (cfg, cfg_error) = Config::load();
     if let Some(e) = &cfg_error {
         eprintln!("rh: {e}");

@@ -82,4 +82,39 @@ impl Listener {
     pub fn cleanup(&self) {
         let _ = std::fs::remove_file(crate::paths::socket_path());
     }
+
+    /// Removes the socket when the daemon is told to stop (SIGTERM from
+    /// systemd, SIGINT from a terminal, SIGHUP when its session ends), so no
+    /// stale `rh.sock` is left for siblings to try.
+    pub fn cleanup_on_signal(&self) {
+        let path = crate::paths::socket_path();
+        let Ok(c) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else {
+            return;
+        };
+        if SOCKET.set(c).is_err() {
+            return;
+        }
+        for sig in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+            // SAFETY: on_signal only calls async-signal-safe functions.
+            unsafe {
+                libc::signal(sig, on_signal as *const () as libc::sighandler_t);
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+static SOCKET: std::sync::OnceLock<std::ffi::CString> = std::sync::OnceLock::new();
+
+#[cfg(unix)]
+extern "C" fn on_signal(sig: libc::c_int) {
+    if let Some(p) = SOCKET.get() {
+        // SAFETY: unlink and _exit are async-signal-safe; p is a valid C
+        // string that lives for the whole program.
+        unsafe {
+            libc::unlink(p.as_ptr());
+        }
+    }
+    // SAFETY: as above.
+    unsafe { libc::_exit(128 + sig) }
 }
