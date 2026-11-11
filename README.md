@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/NathanielInman/roundhouse/actions/workflows/ci.yml"><img src="https://github.com/NathanielInman/roundhouse/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/status-early%20(0.1)-ebcb8b" alt="Early, version 0.1">
+  <img src="https://img.shields.io/badge/status-early%20(0.3)-ebcb8b" alt="Early, version 0.3">
   <img src="https://img.shields.io/badge/Arch%20first-Linux%20%C2%B7%20macOS%20%C2%B7%20Windows%20planned-a3be8c" alt="Arch first; macOS and Windows planned">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-88c0d0" alt="MIT license"></a>
 </p>
@@ -95,8 +95,18 @@ waits.
 
 ## Install
 
-Roundhouse is at 0.1. It runs on Linux with Wayland, and Hyprland gets the
-exact-icon anchoring. Packages come later; for now, build from source:
+Roundhouse is at 0.3. It runs on Linux with Wayland, and Hyprland gets the
+exact-icon anchoring.
+
+**Arch:** `packaging/aur/PKGBUILD` builds the package (`makepkg -si` in that
+directory). It installs `rh`, `rh-board` and a systemd user unit.
+
+**Release tarball:** each [release](https://github.com/NathanielInman/roundhouse/releases)
+has `rh`, `rh-board` and `roundhouse.service` for x86_64 and aarch64 Linux.
+Put the binaries in `~/.local/bin`; the drawer needs `gtk4` and
+`gtk4-layer-shell`.
+
+**From source:**
 
 ```sh
 # Arch: the drawer's libraries
@@ -125,7 +135,9 @@ GPU tile shows AMD cards or hides.
 
 Use full paths: a waybar started by systemd usually does not have
 `~/.local/bin` on its `PATH`. `rh bar` starts the daemon the first time it
-runs, and the daemon starts the drawer the first time you click.
+runs, and the daemon starts the drawer the first time you click. To have
+systemd keep the daemon running instead, enable the user unit from the
+package or the release (`systemctl --user enable --now roundhouse`).
 
 The module's class follows the lamp (`calm`, `heads-up`, `act`, `offline`), so
 the bar can color it:

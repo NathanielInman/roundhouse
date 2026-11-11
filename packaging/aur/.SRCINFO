@@ -1,0 +1,21 @@
+pkgbase = roundhouse
+	pkgdesc = One lamp in your bar; the whole machine slides out of it
+	pkgver = 0.3.0
+	pkgrel = 1
+	url = https://github.com/NathanielInman/roundhouse
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = cargo
+	depends = gtk4
+	depends = gtk4-layer-shell
+	depends = gcc-libs
+	depends = glibc
+	depends = hwdata
+	optdepends = nvidia-utils: NVIDIA GPU readings through NVML
+	optdepends = pipewire: quantum, DSP load and dropouts on the Machine tab
+	optdepends = waybar: the bar the lamp lives in
+	source = roundhouse-0.3.0.tar.gz::https://github.com/NathanielInman/roundhouse/archive/v0.3.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = roundhouse

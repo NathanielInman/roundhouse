@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Linux libraries
+        timeout-minutes: 10
+        run: .github/scripts/gtk4-layer-shell.sh
+      - name: Build
+        env:
+          PKG_CONFIG_PATH: /usr/local/lib/x86_64-linux-gnu/pkgconfig:/usr/local/lib/aarch64-linux-gnu/pkgconfig:/usr/local/lib/pkgconfig
+        run: cargo build --release --locked --target ${{ matrix.target }} -p rh -p rh-board
+      - name: Package
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/rh target/${{ matrix.target }}/release/rh-board dist/
+          sed 's|@BINDIR@|%h/.local/bin|' packaging/systemd/roundhouse.service > dist/roundhouse.service
+          cp README.md LICENSE dist/
+          tar -czf "roundhouse-${{ matrix.target }}.tar.gz" -C dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roundhouse-${{ matrix.target }}
+          path: roundhouse-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum roundhouse-* > SHA256SUMS
+          cat SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --title "Roundhouse ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag
+      - name: Update the AUR PKGBUILD
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          src_sha=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/$GITHUB_REF_NAME.tar.gz" | sha256sum | cut -d' ' -f1)
+          python3 packaging/render.py "$version" "$src_sha"
+          # Author the commit as whoever pushed the tag, never github-actions[bot],
+          # which would otherwise be listed as a repository contributor.
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR_ID+$GITHUB_ACTOR@users.noreply.github.com"
+          git add packaging/aur
+          git commit -m "chore(release): update the PKGBUILD for $GITHUB_REF_NAME" || exit 0
+          git push origin main

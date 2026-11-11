@@ -107,7 +107,7 @@ impl Listener {
 static SOCKET: std::sync::OnceLock<std::ffi::CString> = std::sync::OnceLock::new();
 
 #[cfg(unix)]
-extern "C" fn on_signal(sig: libc::c_int) {
+extern "C" fn on_signal(_sig: libc::c_int) {
     if let Some(p) = SOCKET.get() {
         // SAFETY: unlink and _exit are async-signal-safe; p is a valid C
         // string that lives for the whole program.
@@ -115,6 +115,7 @@ extern "C" fn on_signal(sig: libc::c_int) {
             libc::unlink(p.as_ptr());
         }
     }
-    // SAFETY: as above.
-    unsafe { libc::_exit(128 + sig) }
+    // A requested stop is a clean exit, so systemd does not mark the unit
+    // failed. SAFETY: as above.
+    unsafe { libc::_exit(0) }
 }

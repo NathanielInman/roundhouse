@@ -29,6 +29,14 @@ sibling contract: `testdata/lamp-contract.json` holds every field Switchyard
 may read, and the test fails if one disappears or changes type. Add new
 fields to the fixture; never remove one.
 
+## Release
+
+Tag `vX.Y.Z` after bumping `workspace.package.version` (and `Cargo.lock`) in
+a `chore(release)` commit. `.github/workflows/release.yml` builds x86_64 and
+aarch64 tarballs, publishes the release, and renders
+`packaging/aur/PKGBUILD` with `packaging/render.py`, committing it as
+`$GITHUB_ACTOR`, never a bot.
+
 ## Isolation
 
 The machine you work on may run an installed Roundhouse. Point a dev build
