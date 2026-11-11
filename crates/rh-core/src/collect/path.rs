@@ -183,6 +183,7 @@ struct Known {
     gateway: Option<Reach>,
     internet: Option<Reach>,
     dns: Option<Reach>,
+    tailscale: Option<crate::model::Tailscale>,
 }
 
 /// Folds one attempt into a probe's state: it fails only after two misses
@@ -231,7 +232,16 @@ impl Default for Prober {
 impl Prober {
     /// The latest route and probe results. Starts the probe thread the first
     /// time.
-    pub fn sample(&mut self, deep: bool, plan: Plan) -> (Option<Route>, [Option<Reach>; 3]) {
+    #[allow(clippy::type_complexity)]
+    pub fn sample(
+        &mut self,
+        deep: bool,
+        plan: Plan,
+    ) -> (
+        Option<Route>,
+        [Option<Reach>; 3],
+        Option<crate::model::Tailscale>,
+    ) {
         self.deep.store(deep, Ordering::Relaxed);
         *self.plan.lock().unwrap() = plan;
         if !self.started {
@@ -243,6 +253,7 @@ impl Prober {
         (
             k.route.clone(),
             [k.gateway.clone(), k.internet.clone(), k.dns.clone()],
+            k.tailscale.clone(),
         )
     }
 }
@@ -260,8 +271,10 @@ fn probe_loop(known: Arc<Mutex<Known>>, deep: Arc<AtomicBool>, plan: Arc<Mutex<P
             let host = plan_now.host.parse::<IpAddr>().ok();
             (host.and_then(ping), lookup(&plan_now.name))
         });
+        let tailscale = super::tunnel::tailscale();
         {
             let mut k = known.lock().unwrap();
+            k.tailscale = tailscale;
             k.route = route.as_ref().map(|(iface, g)| Route {
                 iface: iface.clone(),
                 gateway: g.to_string(),

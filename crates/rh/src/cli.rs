@@ -375,6 +375,29 @@ fn status(json: bool) -> Result<i32> {
         way.push(format!("dns {}", reach(d)));
     }
     println!("{:<12}{}", "", way.join("  "));
+    if let Some(t) = &n.tailscale {
+        println!(
+            "{:<12}Tailscale {}{}  {} of {} peers online",
+            "",
+            t.state,
+            t.ips.first().map(|ip| format!(" {ip}")).unwrap_or_default(),
+            t.peers_online,
+            t.peers
+        );
+    }
+    for t in &n.tunnels {
+        println!(
+            "{:<12}{} {}{}  {}",
+            "",
+            t.name,
+            t.kind,
+            t.addresses
+                .first()
+                .map(|a| format!(" {a}"))
+                .unwrap_or_default(),
+            if t.up { "up" } else { "down" }
+        );
+    }
     for l in &n.links {
         let mut line = l.name.clone();
         if let Some(sp) = l.speed {

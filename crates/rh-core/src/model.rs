@@ -73,6 +73,13 @@ pub struct Network {
     /// Each interface backed by a device, up or down.
     #[serde(default)]
     pub links: Vec<Link>,
+    /// VPN and tunnel interfaces (WireGuard, tun, PPP). Their traffic also
+    /// crosses a real link, so it is not in `down`/`up`.
+    #[serde(default)]
+    pub tunnels: Vec<Tunnel>,
+    /// Tailscale's own view, while tailscaled runs.
+    #[serde(default)]
+    pub tailscale: Option<Tailscale>,
     /// The default route, when there is one.
     #[serde(default)]
     pub route: Option<Route>,
@@ -85,6 +92,29 @@ pub struct Network {
     /// A DNS lookup through the system resolver (`network.internet_check`).
     #[serde(default)]
     pub dns: Option<Reach>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Tunnel {
+    pub name: String,
+    /// WireGuard, Tailscale, tun or PPP.
+    pub kind: String,
+    pub up: bool,
+    /// Its addresses, link-local left out.
+    pub addresses: Vec<String>,
+    /// Bytes per second through the tunnel.
+    pub down: f64,
+    pub up_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Tailscale {
+    /// tailscaled's BackendState: Running, Stopped, NeedsLogin, Starting.
+    pub state: String,
+    pub online: bool,
+    pub ips: Vec<String>,
+    pub peers: usize,
+    pub peers_online: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

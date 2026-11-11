@@ -80,6 +80,8 @@ at once, so the drawer never opens on old data for long.
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
 | Network | `/sys/class/net/*/statistics`, `speed` and `carrier_changes` for interfaces with a `device` link (no loopback, bridges or veths), counted per interface so a replugged NIC never spikes the total; `/proc/net/wireless` for Wi-Fi signal | every sample |
 | Way out | `/proc/net/route` and `ipv6_route` for the default route; an ICMP echo to the gateway on an unprivileged ping socket; opt-in (`network.internet_check`), an echo to `probe_host` and a lookup of `probe_name` through the system resolver; each with a 2 s deadline and failed only after two misses in a row | on a helper thread, every 10 s open, 30 s closed |
+| Tunnels | interfaces with no `device` link that are WireGuard (`DEVTYPE=wireguard`), tun (`tun_flags`) or PPP (type 512), with addresses from `getifaddrs`; listed apart from throughput, since their traffic also crosses a real link | every sample |
+| Tailscale | `GET /localapi/v0/status` on tailscaled's socket, when it exists, with a 2 s deadline: state, its addresses, peers online | with the way-out probes |
 | Public IP | a STUN binding request (RFC 5389) to each `network.stun` server over IPv4 from one socket, and to the first over IPv6, on a helper thread; the reply must carry our random transaction ID. Two servers seeing the same port means the NAT keeps one mapping per socket. Opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
@@ -145,6 +147,7 @@ the drawer shows reasons as links to that tab.
 | Link errors | 10 receive or transmit errors in a minute (drops do not count; every LAN has them) | |
 | Link flaps | 2 down-and-up cycles in a minute | |
 | Way out | the first hop that fails: no default route while a link is up; the router not answering (only one that has answered before: some block ping); the internet not answering; DNS failing | |
+| Tailscale | tailscaled says `NeedsLogin` | |
 | Loud fans | a fan at `fan_loud_rpm` (1600) or a GPU fan at `fan_loud_pct` (60%), during a recording session only | |
 
 Read-only filesystems, stale shares and automount points never count.

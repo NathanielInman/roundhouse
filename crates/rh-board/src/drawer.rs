@@ -200,6 +200,46 @@ fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
             ..Default::default()
         });
     }
+    if let Some(t) = &n.tailscale {
+        rows.push(RowData {
+            name: "Tailscale".into(),
+            detail: match t.ips.first() {
+                Some(ip) => format!("{} · {ip}", t.state),
+                None => t.state.clone(),
+            },
+            right: format!("{} of {} peers online", t.peers_online, t.peers),
+            right_class: match t.state.as_str() {
+                "Running" if t.online => "calm",
+                "NeedsLogin" => "heads-up",
+                _ => "",
+            },
+            ..Default::default()
+        });
+    }
+    for t in &n.tunnels {
+        // Tailscale's interface is already the row above.
+        if t.kind == "Tailscale" && n.tailscale.is_some() {
+            continue;
+        }
+        rows.push(RowData {
+            name: t.name.clone(),
+            detail: match t.addresses.first() {
+                Some(a) => format!("{} · {a}", t.kind),
+                None => t.kind.clone(),
+            },
+            right: if t.up {
+                format!(
+                    "↓ {} ↑ {}",
+                    rh_core::collect::net::rate(t.down),
+                    rh_core::collect::net::rate(t.up_rate)
+                )
+            } else {
+                "down".into()
+            },
+            right_class: if t.up { "" } else { "heads-up" },
+            ..Default::default()
+        });
+    }
     if n.public_ip.is_some() || n.public_ipv6.is_some() {
         let ips: Vec<&str> = [&n.public_ip, &n.public_ipv6]
             .into_iter()

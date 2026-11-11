@@ -310,6 +310,19 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
         );
     }
 
+    if n.tailscale
+        .as_ref()
+        .is_some_and(|t| t.state == "NeedsLogin")
+    {
+        r.push(
+            "net.tailscale".into(),
+            Level::HeadsUp,
+            "network",
+            "Tailscale needs you to log in again".into(),
+            Kind::Steady,
+        );
+    }
+
     // Fans are noise in the take: worth a light only while recording.
     if s.session.is_some() {
         let mut loud: Vec<String> = m

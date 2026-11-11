@@ -15,6 +15,7 @@ pub mod pipewire;
 pub mod procfs;
 pub mod storage;
 pub mod stun;
+pub mod tunnel;
 
 use crate::config::Config;
 use crate::model::{AppUsage, Cpu, Disk, Host, Machine, Memory, Pressure, Snapshot};
@@ -183,7 +184,8 @@ impl Collector {
             host: cfg.network.probe_host.clone(),
             name: cfg.network.probe_name.clone(),
         };
-        let (route, [gateway, internet, dns]) = self.path.sample(deep, plan);
+        let (route, [gateway, internet, dns], tailscale) = self.path.sample(deep, plan);
+        network.tailscale = tailscale;
         network.route = route;
         network.gateway = gateway;
         network.internet = internet;

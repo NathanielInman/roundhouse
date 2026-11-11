@@ -44,6 +44,8 @@ struct LinkState {
 #[derive(Default)]
 pub struct NetReader {
     links: HashMap<String, LinkState>,
+    /// Tunnel byte counters on the last sample.
+    tunnels: HashMap<String, (Instant, u64, u64)>,
     down: VecDeque<f32>,
     up: VecDeque<f32>,
     ip: Arc<Mutex<IpState>>,
@@ -183,6 +185,35 @@ impl NetReader {
                 wireless: dir.join("wireless").exists(),
             });
         }
+        let addrs = super::tunnel::addresses();
+        let mut tunnels = vec![];
+        for (name, kind, is_up) in super::tunnel::find(root) {
+            let stat = |f: &str| {
+                read_trim(root.join(&name).join("statistics").join(f))
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(0)
+            };
+            let (rx, tx) = (stat("rx_bytes"), stat("tx_bytes"));
+            let (mut rd, mut wr) = (0.0, 0.0);
+            if let Some((t, prx, ptx)) = self.tunnels.get(&name) {
+                let dt = now.duration_since(*t).as_secs_f64();
+                if dt > 0.0 {
+                    rd = delta(rx, *prx) as f64 / dt;
+                    wr = delta(tx, *ptx) as f64 / dt;
+                }
+            }
+            self.tunnels.insert(name.clone(), (now, rx, tx));
+            tunnels.push(crate::model::Tunnel {
+                addresses: addrs.get(&name).cloned().unwrap_or_default(),
+                name,
+                kind,
+                up: is_up,
+                down: rd,
+                up_rate: wr,
+            });
+        }
+        self.tunnels
+            .retain(|n, _| tunnels.iter().any(|t| t.name == *n));
         // Forget interfaces that went away, so a replug starts fresh.
         self.links.retain(|n, _| ifaces.iter().any(|(i, _)| i == n));
         if have_rates {
@@ -211,6 +242,7 @@ impl NetReader {
             public_ipv6: seen.v6.map(|a| a.to_string()),
             nat_keeps_port: seen.same_port,
             links,
+            tunnels,
             ..Default::default()
         }
     }
