@@ -116,6 +116,11 @@ pub struct LampConfig {
     pub mem_pressure_act: f32,
     /// Available memory under this percentage of total is a problem.
     pub mem_free_act: f32,
+    /// During a recording session, a fan at or above this speed (RPM) is a
+    /// heads-up: it is in the take.
+    pub fan_loud_rpm: u32,
+    /// The same for a GPU fan, in percent.
+    pub fan_loud_pct: f32,
     /// Seconds a temperature must stay past its heads-up line before the
     /// lamp rises, so a spike does not change the light.
     pub attack: f32,
@@ -140,6 +145,8 @@ impl Default for LampConfig {
             mem_pressure_warn: 10.0,
             mem_pressure_act: 10.0,
             mem_free_act: 5.0,
+            fan_loud_rpm: 1600,
+            fan_loud_pct: 60.0,
             attack: 10.0,
             sustain: 30.0,
             release: 30.0,

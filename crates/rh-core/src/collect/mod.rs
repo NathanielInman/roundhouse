@@ -196,6 +196,14 @@ impl Collector {
                 gpus,
                 network,
                 times: self.times.iter().copied().collect(),
+                fans: temps
+                    .fans
+                    .iter()
+                    .map(|(name, rpm)| crate::model::Fan {
+                        name: name.clone(),
+                        rpm: *rpm,
+                    })
+                    .collect(),
             },
             disks: self.disks.clone(),
             apps: if deep { self.apps.clone() } else { vec![] },

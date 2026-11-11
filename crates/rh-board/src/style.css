@@ -156,6 +156,7 @@ progressbar.meter.act > trough > progress { background: @rh_act; }
 .yard-line:hover { background: @rh_tile_hover; color: @rh_accent; }
 
 .foot { color: @rh_dim; font-size: 10.5px; }
+.fans { color: @rh_dim; font-size: 10.5px; letter-spacing: 0.04em; padding: 0 2px; }
 
 /* A recording session: heavy builds wait. Accent, not alarm. */
 .yard-line.session {

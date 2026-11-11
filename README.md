@@ -163,6 +163,8 @@ disk_act = 95
 # Temperatures follow each part's own limit: heads-up 10°C under it, act at
 # it. Set a key only to override that.
 # cpu_temp_act = 90   # °C
+fan_loud_rpm = 1600   # while recording, a fan this fast is a heads-up
+fan_loud_pct = 60     # the same for a GPU fan, in percent
 attack = 10           # seconds a temperature stays high before the lamp rises
 sustain = 30          # seconds at its limit before act (CPUs boost to it)
 release = 30          # seconds clear before the lamp falls

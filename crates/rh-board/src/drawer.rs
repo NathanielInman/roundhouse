@@ -49,6 +49,8 @@ struct MachinePage {
     mem: Tile,
     psi: Tile,
     net: Tile,
+    /// Every fan's speed, on one line.
+    fans: gtk::Label,
     tiles: Vec<Spring>,
     apps: Rows,
     apps_card: gtk::Box,
@@ -336,6 +338,9 @@ impl Drawer {
         let apps_card = card("MEMORY BY APP", "NOT BY PID");
         let apps = Rows::new();
         apps_card.append(&apps.root);
+        let fans = label("", &["fans", "num"]);
+        fans.set_wrap(true);
+        fans.set_visible(false);
         let audio_card = card("AUDIO", "");
         let audio = Rows::new();
         audio_card.append(&audio.root);
@@ -344,6 +349,7 @@ impl Drawer {
         mroot.append(&session_line);
         mroot.append(&yard_line);
         mroot.append(&grid);
+        mroot.append(&fans);
         mroot.append(&audio_card);
         mroot.append(&apps_card);
         let machine = MachinePage {
@@ -358,6 +364,7 @@ impl Drawer {
             mem,
             psi,
             net,
+            fans,
             tiles,
             apps,
             apps_card,
@@ -839,6 +846,19 @@ impl Drawer {
             .map(|(_, v)| *v)
             .fold(100_000.0f32, f32::max);
         p.net.spark.set(&n.down_history, &m.times, peak);
+
+        let mut fans: Vec<String> = m
+            .fans
+            .iter()
+            .map(|f| format!("{} {} RPM", f.name, f.rpm))
+            .collect();
+        fans.extend(
+            m.gpus
+                .iter()
+                .filter_map(|g| g.fan.map(|f| format!("{} {f:.0}%", g.name))),
+        );
+        p.fans.set_visible(!fans.is_empty());
+        p.fans.set_label(&format!("FANS · {}", fans.join(" · ")));
 
         let total = mem.total.max(1) as f64;
         let rows: Vec<RowData> = s

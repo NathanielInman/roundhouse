@@ -21,6 +21,24 @@ pub struct Temps {
     pub drives: Vec<(String, Reading)>,
     /// Resolved PCI device path and its reading (amdgpu "edge").
     pub pci: Vec<(PathBuf, Reading)>,
+    /// Every spinning fan: its label (or "chip fanN") and speed in RPM.
+    pub fans: Vec<(String, u32)>,
+}
+
+/// The fans on one hwmon chip that are spinning. Headers with nothing on
+/// them read 0 and are left out.
+fn fans(dir: &Path, chip: &str) -> Vec<(String, u32)> {
+    (1..=12)
+        .filter_map(|n| {
+            let rpm = read_trim(dir.join(format!("fan{n}_input")))?
+                .parse::<u32>()
+                .ok()
+                .filter(|r| *r > 0)?;
+            let name = read_trim(dir.join(format!("fan{n}_label")))
+                .unwrap_or_else(|| format!("{chip} fan{n}"));
+            Some((name, rpm))
+        })
+        .collect()
 }
 
 fn millideg(path: &Path) -> Option<f32> {
@@ -113,6 +131,7 @@ pub fn read_from(root: &Path) -> Temps {
             continue;
         };
         let dev = std::fs::canonicalize(dir.join("device")).ok();
+        t.fans.extend(fans(&dir, &name));
         match name.as_str() {
             "k10temp" | "zenpower" => {
                 if t.cpu.is_none() {
@@ -149,6 +168,7 @@ pub fn read_from(root: &Path) -> Temps {
         }
     }
     t.drives.sort_by(|a, b| a.0.cmp(&b.0));
+    t.fans.sort();
     t
 }
 
@@ -247,5 +267,30 @@ mod tests {
         assert_eq!(amd_tjmax("Ryzen 9 5950X"), Some(90.0));
         assert_eq!(amd_tjmax("Ryzen 7 9800X3D"), None);
         assert_eq!(amd_tjmax("Core i7-12700K"), None);
+    }
+
+    #[test]
+    fn spinning_fans_only() {
+        // Laid out the way nct6775 reports a desktop board: unlabeled RPM
+        // inputs, with 0 on the empty headers.
+        let dir = std::env::temp_dir().join(format!("rh-fans-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        write(
+            &dir,
+            &[
+                ("fan1_input", "0"),
+                ("fan2_input", "1084"),
+                ("fan3_input", "742"),
+                ("fan3_label", "Pump"),
+            ],
+        );
+        assert_eq!(
+            fans(&dir, "nct6798"),
+            vec![
+                ("nct6798 fan2".to_string(), 1084),
+                ("Pump".to_string(), 742)
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

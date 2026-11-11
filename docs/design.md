@@ -73,6 +73,7 @@ at once, so the drawer never opens on old data for long.
 | CPU model, clock | `/proc/cpuinfo` | first sample, then while open |
 | Temperatures | `/sys/class/hwmon`: `k10temp`/`zenpower` Tctl, `coretemp` package, `nvme`/`drivetemp` Composite mapped to block devices, `amdgpu` edge mapped to PCI devices; each with its limit (see the lamp) | every sample |
 | Memory, swap | `/proc/meminfo` | every sample |
+| Fans | `/sys/class/hwmon/*/fan*_input` (spinning ones; label or "chip fanN"), NVML fan percent | every sample |
 | Pressure | `/proc/pressure/{cpu,memory,io}` | every sample |
 | NVIDIA | NVML, loaded at runtime once | every sample |
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
@@ -138,6 +139,7 @@ the drawer shows reasons as links to that tab.
 | Memory pressure | PSI `some` avg60 at `mem_pressure_warn` (10) | PSI `full` avg10 at `mem_pressure_act` (10) |
 | Free memory | | under `mem_free_act` (5%) |
 | Audio dropouts | any PipeWire xrun in the last minute, during a recording session only | |
+| Loud fans | a fan at `fan_loud_rpm` (1600) or a GPU fan at `fan_loud_pct` (60%), during a recording session only | |
 
 Read-only filesystems, stale shares and automount points never count.
 

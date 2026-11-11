@@ -218,6 +218,29 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
             );
         }
     }
+    // Fans are noise in the take: worth a light only while recording.
+    if s.session.is_some() {
+        let mut loud: Vec<String> = m
+            .fans
+            .iter()
+            .filter(|f| f.rpm >= t.fan_loud_rpm)
+            .map(|f| format!("{} {} RPM", f.name, f.rpm))
+            .collect();
+        loud.extend(m.gpus.iter().filter_map(|g| {
+            let f = g.fan?;
+            (f >= t.fan_loud_pct).then(|| format!("{} fan {f:.0}%", g.name))
+        }));
+        if !loud.is_empty() {
+            r.push(
+                "fans.loud".into(),
+                Level::HeadsUp,
+                "machine",
+                format!("fans are loud: {}", loud.join(", ")),
+                Kind::Temp,
+            );
+        }
+    }
+
     // Dropouts matter while recording; outside a session a stray xrun from a
     // Bluetooth headset is not worth a light.
     if s.session.is_some() {
@@ -621,5 +644,19 @@ mod tests {
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.level, Level::HeadsUp);
         assert_eq!(lamp.reasons[0].text, "2 audio dropouts in the last minute");
+    }
+
+    #[test]
+    fn loud_fans_count_only_while_recording() {
+        let mut s = Snapshot::default();
+        s.machine.fans.push(crate::model::Fan {
+            name: "nct6798 fan2".into(),
+            rpm: 2100,
+        });
+        assert_eq!(evaluate(&s, &LampConfig::default()).level, Level::Calm);
+        s.session = Some(crate::model::Session::default());
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.reasons[0].text, "fans are loud: nct6798 fan2 2100 RPM");
+        assert_eq!(hold(&lamp, None), None);
     }
 }

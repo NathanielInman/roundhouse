@@ -67,6 +67,7 @@ impl GpuReader {
                     vram_used: mem.as_ref().map(|m| m.used),
                     vram_total: mem.as_ref().map(|m| m.total),
                     power_w: d.power_usage().ok().map(|mw| mw as f32 / 1000.0),
+                    fan: d.fan_speed(0).ok().map(|f| f as f32),
                     throttling: d.current_throttle_reasons().is_ok_and(|r| {
                         r.intersects(
                             ThrottleReasons::HW_THERMAL_SLOWDOWN
@@ -130,6 +131,7 @@ impl GpuReader {
                 vram_total: num("mem_info_vram_total"),
                 power_w: None,
                 throttling: false,
+                fan: None,
                 history: vec![],
             });
         }

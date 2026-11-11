@@ -316,6 +316,19 @@ fn status(json: bool) -> Result<i32> {
         }
         println!("{:<12}{line}", "gpu");
     }
+    let mut fans: Vec<String> = m
+        .fans
+        .iter()
+        .map(|f| format!("{} {} RPM", f.name, f.rpm))
+        .collect();
+    fans.extend(
+        m.gpus
+            .iter()
+            .filter_map(|g| g.fan.map(|f| format!("{} {f:.0}%", g.name))),
+    );
+    if !fans.is_empty() {
+        println!("{:<12}{}", "fans", fans.join("  "));
+    }
     let n = &m.network;
     let mut net = format!(
         "down {}  up {}  ({})",
@@ -676,6 +689,19 @@ fn doctor_setup() -> Result<i32> {
                 .map(|g| g.name.as_str())
                 .collect::<Vec<_>>()
                 .join(", "),
+        );
+    }
+    if s.machine.fans.is_empty() {
+        check(
+            None,
+            "fans",
+            "the board reports none; its sensor chip's driver may not be loaded (often nct6775 or it87: try `sudo modprobe nct6775`, then sensors-detect)",
+        );
+    } else {
+        check(
+            Some(true),
+            "fans",
+            &format!("{} spinning", s.machine.fans.len()),
         );
     }
     check(

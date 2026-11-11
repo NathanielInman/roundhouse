@@ -40,6 +40,9 @@ pub struct Machine {
     pub gpus: Vec<Gpu>,
     #[serde(default)]
     pub network: Network,
+    /// Every spinning fan the board reports.
+    #[serde(default)]
+    pub fans: Vec<Fan>,
     /// When each recent sample was taken (Unix seconds), oldest first. Every
     /// `history` series ends at the same sample as this list, so sparklines
     /// can be drawn against time: samples come every 5 s while the drawer is
@@ -139,6 +142,9 @@ pub struct Gpu {
     /// The card says it is slowing down for heat right now (NVML).
     #[serde(default)]
     pub throttling: bool,
+    /// Fan speed in percent of its maximum (NVML).
+    #[serde(default)]
+    pub fan: Option<f32>,
     pub history: Vec<f32>,
 }
 
@@ -269,6 +275,12 @@ pub struct Lamp {
     /// so a sibling can tell a calm answer from an older Roundhouse.
     #[serde(default)]
     pub hold: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Fan {
+    pub name: String,
+    pub rpm: u32,
 }
 
 /// What the sound cards are doing.
