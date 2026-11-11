@@ -22,6 +22,13 @@ pub struct Config {
 pub struct BarConfig {
     /// The glyph the bar module shows.
     pub icon: String,
+    /// Glyphs for the other states, so the lamp reads without color (for
+    /// color-blind eyes or a one-color bar). Unset, each uses `icon`.
+    pub icon_heads_up: Option<String>,
+    pub icon_act: Option<String>,
+    pub icon_offline: Option<String>,
+    /// Shown while a recording session is on.
+    pub icon_session: Option<String>,
     /// The number beside the icon: `cpu.temp`, `cpu`, `memory`, `gpu.temp`,
     /// `gpu` or `none`.
     pub pin: String,
@@ -33,6 +40,10 @@ impl Default for BarConfig {
     fn default() -> Self {
         BarConfig {
             icon: "\u{f0765}".into(),
+            icon_heads_up: None,
+            icon_act: None,
+            icon_offline: None,
+            icon_session: None,
             pin: "none".into(),
             namespace: "waybar".into(),
         }

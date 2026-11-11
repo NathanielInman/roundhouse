@@ -144,6 +144,10 @@ Everything is optional. `~/.config/roundhouse/config.toml`:
 ```toml
 [bar]
 icon = "\U000F0765"   # the dot (Nerd Font md-circle); any glyph works
+# icon_heads_up = "\U000F0766"  # per-state glyphs, so the lamp reads without
+# icon_act = "\U000F0028"       # color; unset, each uses icon
+# icon_offline = "\U000F0766"
+# icon_session = "\U000F036C"   # while a recording session is on
 pin = "none"          # a number beside the dot: cpu.temp, cpu, memory, gpu.temp, gpu or none
 namespace = "waybar"  # the bar's layer-shell namespace
 

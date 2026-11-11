@@ -9,7 +9,9 @@ The README is the tour; this is the spec.
 
 1. **One lamp.** The bar module is a single dot (and a pinned number only
    if you ask for one). Its color says whether anything needs you; the
-   tooltip and the drawer say why.
+   tooltip and the drawer say why. `bar.icon_heads_up`, `icon_act`,
+   `icon_offline` and `icon_session` give each state its own glyph, so the
+   lamp also reads without color.
 2. **Answers, not numbers.** Each tab answers one question ("why is it
    slow?", "where did my space go?"). Raw counters are there to back the
    answer up.
