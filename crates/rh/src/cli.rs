@@ -326,6 +326,42 @@ fn status(json: bool) -> Result<i32> {
         net.push_str(&format!("  public {ip}"));
     }
     println!("{:<12}{net}", "network");
+    let a = &s.audio;
+    if let Some(g) = &a.graph {
+        println!(
+            "{:<12}PipeWire {} @ {} Hz ({:.1} ms) on {}  DSP {:.0}%  {} dropouts in the last minute",
+            "audio",
+            g.quantum,
+            g.rate,
+            g.latency_ms(),
+            g.driver,
+            g.load,
+            g.xruns_minute
+        );
+    }
+    for st in &a.streams {
+        let mut line = format!(
+            "{} {}",
+            st.card,
+            if st.capture { "recording" } else { "playing" }
+        );
+        if let Some(o) = &st.owner {
+            line.push_str(&format!(" via {o}"));
+        }
+        if let Some(r) = st.rate {
+            line.push_str(&format!("  {r} Hz"));
+        }
+        if !st.format.is_empty() {
+            line.push_str(&format!(" {}", st.format));
+        }
+        if let Some(l) = st.latency_ms {
+            line.push_str(&format!("  {l:.1} ms"));
+        }
+        println!("{:<12}{line}", if a.graph.is_some() { "" } else { "audio" });
+    }
+    if !a.midi.is_empty() {
+        println!("{:<12}{}", "midi", a.midi.join(", "));
+    }
     println!("storage");
     for d in &s.disks {
         let mut head = match (&d.model, d.kind) {

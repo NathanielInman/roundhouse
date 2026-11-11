@@ -33,8 +33,10 @@ struct State {
     visible: bool,
     boards: Vec<Sub>,
     bars: Vec<Sub>,
-    /// The recording session, while one is on.
+    /// The recording session started with `rh session on`, while one is on.
     session: Option<rh_core::model::Session>,
+    /// The session `session.auto` started because an app is recording.
+    auto: AutoSession,
     /// Take a sample now rather than at the next tick.
     wake: bool,
     /// The latest answer from Switchyard, kept by its own thread.
@@ -46,6 +48,55 @@ struct State {
 }
 
 type Shared = Arc<(Mutex<State>, Condvar)>;
+
+/// How long a recording must stay stopped before an automatic session ends.
+const AUTO_RELEASE: f64 = 30.0;
+
+/// A session started by a recording app (`session.auto`).
+#[derive(Default)]
+struct AutoSession {
+    on: Option<rh_core::model::Session>,
+    /// When the recording stopped, while it has.
+    quiet_since: Option<f64>,
+    /// `rh session off` ended it; stay off until the recording stops.
+    dismissed: bool,
+}
+
+impl AutoSession {
+    /// Follows whether a matching app is recording, at `now`.
+    fn update(&mut self, recording: bool, now: f64) {
+        if recording {
+            self.quiet_since = None;
+            if !self.dismissed {
+                self.on.get_or_insert(rh_core::model::Session {
+                    since: now,
+                    auto: true,
+                });
+            }
+            return;
+        }
+        self.dismissed = false;
+        let quiet = *self.quiet_since.get_or_insert(now);
+        if now - quiet >= AUTO_RELEASE {
+            self.on = None;
+        }
+    }
+}
+
+impl State {
+    /// The session in effect: one started by hand wins.
+    fn session(&self) -> Option<rh_core::model::Session> {
+        self.session.clone().or_else(|| self.auto.on.clone())
+    }
+}
+
+/// Whether an app is recording from a card that may start a session.
+fn recording(audio: &rh_core::model::Audio, cards: &[String]) -> bool {
+    audio
+        .streams
+        .iter()
+        .any(|s| s.capture && (cards.is_empty() || cards.iter().any(|c| c == &s.card)))
+}
 
 /// A subscriber: the queue its writer thread drains.
 type Sub = SyncSender<Arc<str>>;
@@ -256,18 +307,21 @@ fn handle(shared: Shared, stream: Stream) {
             }
             Request::Session { on } => {
                 let mut st = lock.lock().unwrap();
-                let on = on.unwrap_or(st.session.is_none());
-                if on != st.session.is_some() {
+                let on = on.unwrap_or(st.session().is_none());
+                if on != st.session().is_some() {
                     st.session = on.then(|| rh_core::model::Session {
                         since: rh_core::now(),
                         auto: false,
                     });
+                    if !on && st.auto.on.take().is_some() {
+                        st.auto.dismissed = true;
+                    }
                     save_session(st.session.as_ref());
                     st.wake = true;
                     cv.notify_all();
                 }
                 let mut snap = st.snap.clone();
-                snap.session = st.session.clone();
+                snap.session = st.session();
                 snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, snap.session.as_ref());
                 Reply {
                     snapshot: Some(Box::new(snap)),
@@ -328,7 +382,7 @@ fn sampler(shared: Shared) {
     let mut due = Instant::now();
     let mut was_visible = false;
     loop {
-        let (cfg, cfg_error, visible, switchyard, session) = {
+        let (cfg, cfg_error, visible, switchyard, watch) = {
             let mut st = lock.lock().unwrap();
             st.wake = false;
             let now_mtime = config_mtime();
@@ -343,11 +397,23 @@ fn sampler(shared: Shared) {
                 st.cfg_error.clone(),
                 st.visible,
                 st.switchyard.clone(),
-                st.session.clone(),
+                st.session().is_some(),
             )
         };
 
+        collector.watch_audio = watch;
         let mut snap = collector.sample(visible, &cfg);
+        let session = {
+            let mut st = lock.lock().unwrap();
+            if cfg.session.auto {
+                let rec = recording(&snap.audio, &cfg.session.cards);
+                st.auto.update(rec, snap.now);
+            } else {
+                st.auto = AutoSession::default();
+            }
+            st.session()
+        };
+        snap.session = session.clone();
         snap.siblings.switchyard = if cfg.siblings.switchyard {
             switchyard
         } else {
@@ -355,7 +421,6 @@ fn sampler(shared: Shared) {
         };
         snap.lamp = lamp.update(&snap, &cfg.lamp);
         snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, session.as_ref());
-        snap.session = session;
         snap.config_error = cfg_error;
         let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
         let ev = event_line(&Event::Snapshot {
@@ -404,6 +469,7 @@ pub fn run() -> anyhow::Result<i32> {
             board_started: None,
             switchyard: None,
             session: load_session(),
+            auto: AutoSession::default(),
             wake: false,
         }),
         Condvar::new(),
@@ -429,5 +495,49 @@ pub fn run() -> anyhow::Result<i32> {
                 std::thread::sleep(Duration::from_millis(200));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_sessions_follow_the_recording() {
+        let mut a = AutoSession::default();
+        a.update(true, 0.0);
+        assert!(a.on.as_ref().is_some_and(|s| s.auto && s.since == 0.0));
+        a.update(false, 10.0);
+        assert!(a.on.is_some());
+        a.update(true, 20.0);
+        a.update(false, 25.0);
+        assert!(a.on.is_some());
+        a.update(false, 55.0);
+        assert!(a.on.is_none());
+    }
+
+    #[test]
+    fn a_dismissed_session_waits_for_the_next_recording() {
+        let mut a = AutoSession::default();
+        a.update(true, 0.0);
+        a.on = None;
+        a.dismissed = true;
+        a.update(true, 5.0);
+        assert!(a.on.is_none());
+        a.update(false, 6.0);
+        a.update(true, 7.0);
+        assert!(a.on.is_some());
+    }
+
+    #[test]
+    fn only_listed_cards_start_a_session() {
+        let mut audio = rh_core::model::Audio::default();
+        audio.streams.push(rh_core::model::AudioStream {
+            card: "Cam Link 4K".into(),
+            capture: true,
+            ..Default::default()
+        });
+        assert!(recording(&audio, &[]));
+        assert!(!recording(&audio, &["Yeti X".into()]));
     }
 }

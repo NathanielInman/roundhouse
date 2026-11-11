@@ -18,6 +18,8 @@ pub struct Snapshot {
     /// The recording session, while one is on.
     #[serde(default)]
     pub session: Option<Session>,
+    #[serde(default)]
+    pub audio: Audio,
     /// Unix seconds when the sample was taken.
     pub now: f64,
 }
@@ -267,6 +269,69 @@ pub struct Lamp {
     /// so a sibling can tell a calm answer from an older Roundhouse.
     #[serde(default)]
     pub hold: Option<String>,
+}
+
+/// What the sound cards are doing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Audio {
+    /// Running PCM streams.
+    pub streams: Vec<AudioStream>,
+    /// Hardware MIDI devices that are plugged in.
+    pub midi: Vec<String>,
+    /// PipeWire's graph, while the drawer is open or a session is on.
+    #[serde(default)]
+    pub graph: Option<AudioGraph>,
+}
+
+impl Audio {
+    /// Something is recording from a sound card.
+    pub fn capturing(&self) -> bool {
+        self.streams.iter().any(|s| s.capture)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AudioStream {
+    /// The card's name ("Yeti X").
+    pub card: String,
+    /// `card4/pcm0c`.
+    pub device: String,
+    /// Recording rather than playing.
+    pub capture: bool,
+    pub rate: Option<u32>,
+    pub format: String,
+    pub channels: Option<u32>,
+    /// The process holding the device (`pipewire`, or an app using ALSA
+    /// directly).
+    pub owner: Option<String>,
+    /// One period, when an app holds the device itself. Behind a sound
+    /// server the server's quantum is what counts.
+    pub latency_ms: Option<f32>,
+}
+
+/// PipeWire's graph, from its profiler.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AudioGraph {
+    /// The driver node the graph runs on.
+    pub driver: String,
+    /// Samples per cycle.
+    pub quantum: i64,
+    pub rate: u32,
+    /// Percent of each cycle spent processing.
+    pub load: f32,
+    /// Xruns (dropouts) in the last minute.
+    pub xruns_minute: u32,
+}
+
+impl AudioGraph {
+    /// One cycle, in milliseconds.
+    pub fn latency_ms(&self) -> f32 {
+        if self.rate == 0 {
+            0.0
+        } else {
+            self.quantum as f32 / self.rate as f32 * 1000.0
+        }
+    }
 }
 
 /// A recording session: heavy work waits until it ends, without turning the

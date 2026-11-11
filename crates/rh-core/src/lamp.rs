@@ -218,6 +218,23 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
             );
         }
     }
+    // Dropouts matter while recording; outside a session a stray xrun from a
+    // Bluetooth headset is not worth a light.
+    if s.session.is_some() {
+        if let Some(g) = &s.audio.graph {
+            if g.xruns_minute > 0 {
+                let n = g.xruns_minute;
+                let what = if n == 1 { "dropout" } else { "dropouts" };
+                r.push(
+                    "audio.xruns".into(),
+                    Level::HeadsUp,
+                    "machine",
+                    format!("{n} audio {what} in the last minute"),
+                    Kind::Steady,
+                );
+            }
+        }
+    }
     r.out
 }
 
@@ -590,5 +607,19 @@ mod tests {
     fn hold_is_always_sent() {
         let json = serde_json::to_string(&Lamp::default()).unwrap();
         assert_eq!(json, r#"{"level":"calm","reasons":[],"hold":null}"#);
+    }
+
+    #[test]
+    fn dropouts_count_only_while_recording() {
+        let mut s = Snapshot::default();
+        s.audio.graph = Some(crate::model::AudioGraph {
+            xruns_minute: 2,
+            ..Default::default()
+        });
+        assert_eq!(evaluate(&s, &LampConfig::default()).level, Level::Calm);
+        s.session = Some(crate::model::Session::default());
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.level, Level::HeadsUp);
+        assert_eq!(lamp.reasons[0].text, "2 audio dropouts in the last minute");
     }
 }

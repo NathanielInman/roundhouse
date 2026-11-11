@@ -80,6 +80,8 @@ at once, so the drawer never opens on old data for long.
 | Public IP | one plain HTTP `GET /ip` to ifconfig.co on a helper thread, opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
+| Audio streams | `/proc/asound/cards`, `card*/pcm*/sub*/status` and `hw_params` (running streams, rate, format, owner); `seq/clients` (MIDI devices) | every sample |
+| PipeWire | its native socket (`$XDG_RUNTIME_DIR/pipewire-0`), spoken directly: bind the profiler, read quantum, DSP load and xrun counts | on a helper thread while open or during a recording session |
 | Switchyard | its socket | every 2 s open, 15 s closed |
 
 Sparklines keep the last 60 samples, and `machine.times` says when each was
@@ -135,6 +137,7 @@ the drawer shows reasons as links to that tab.
 | GPU temperature | `gpu_temp_warn` (limit - 10°C) | `gpu_temp_act` (limit) |
 | Memory pressure | PSI `some` avg60 at `mem_pressure_warn` (10) | PSI `full` avg10 at `mem_pressure_act` (10) |
 | Free memory | | under `mem_free_act` (5%) |
+| Audio dropouts | any PipeWire xrun in the last minute, during a recording session only | |
 
 Read-only filesystems, stale shares and automount points never count.
 
@@ -271,6 +274,28 @@ make worse (a filesystem, memory). Heat is never a hold: a build heats the
 CPU, and a part at its limit protects itself. The field is always sent
 (`null` when clear), so a sibling can tell a calm answer from an older
 Roundhouse.
+
+### Audio
+
+`collect/audio.rs` reads `/proc/asound`: each running PCM substream with its
+card, direction, rate, format and owning process, and the hardware MIDI
+clients. When an app holds a device itself (a DAW on raw ALSA), one period is
+its latency; behind PipeWire, ALSA's buffer says nothing about what an app
+hears, so the drawer shows PipeWire's quantum instead.
+
+`collect/pipewire.rs` speaks PipeWire's native protocol over its socket with
+no library: `Core.Hello`, `Client.UpdateProperties`, `Core.GetRegistry`, then
+`Registry.Bind` on the `PipeWire:Interface:Profiler` global, answering
+`Core.Ping` with `Pong`. Each profile event carries the driver's clock
+(quantum and rate), its DSP load and its running xrun count; xruns in the last
+minute are the deltas. Binding the profiler turns profiling on in the graph,
+so the watcher connects only while the drawer is open or a session is on and
+hangs up otherwise. Without PipeWire the graph line is hidden.
+
+With `session.auto`, a recording app (a capture stream on a card listed in
+`session.cards`, or any card when the list is empty) starts a session, which
+ends 30 s after the recording stops. `rh session off` ends it until the next
+recording.
 
 ## Protocol
 

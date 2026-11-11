@@ -6,9 +6,11 @@
 //! what macOS and Windows get until their collectors land.
 
 pub mod apps;
+pub mod audio;
 pub mod gpu;
 pub mod hwmon;
 pub mod net;
+pub mod pipewire;
 pub mod procfs;
 pub mod storage;
 
@@ -59,6 +61,9 @@ pub struct Collector {
     times: VecDeque<f64>,
     /// Intel's package throttle count on the last sample.
     throttle_count: Option<u64>,
+    pipewire: pipewire::Watcher,
+    /// Watch PipeWire even with the drawer closed (a recording session).
+    pub watch_audio: bool,
 }
 
 impl Default for Collector {
@@ -82,6 +87,8 @@ impl Collector {
             disks_at: None,
             apps: vec![],
             throttle_count: None,
+            pipewire: pipewire::Watcher::default(),
+            watch_audio: false,
             times: VecDeque::with_capacity(HISTORY),
         }
     }
@@ -172,6 +179,9 @@ impl Collector {
             self.apps = apps::sample(8);
         }
 
+        let mut audio = audio::scan();
+        audio.graph = self.pipewire.sample(deep || self.watch_audio);
+
         let now = crate::now();
         if self.times.len() == HISTORY {
             self.times.pop_front();
@@ -189,6 +199,7 @@ impl Collector {
             },
             disks: self.disks.clone(),
             apps: if deep { self.apps.clone() } else { vec![] },
+            audio,
             now,
             ..Default::default()
         }

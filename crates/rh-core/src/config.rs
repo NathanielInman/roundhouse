@@ -14,6 +14,7 @@ pub struct Config {
     pub lamp: LampConfig,
     pub network: NetworkConfig,
     pub siblings: SiblingsConfig,
+    pub session: SessionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -204,6 +205,17 @@ pub struct NetworkConfig {
     /// Show the public IP. Off by default because it asks a third party
     /// (ifconfig.co, over plain HTTP) once a minute while the drawer is open.
     pub public_ip: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionConfig {
+    /// Start a recording session on its own while an app records from a
+    /// sound card, and end it 30 s after the recording stops.
+    pub auto: bool,
+    /// Only these cards start one (names as in `rh status`, such as
+    /// "Yeti X"). Empty means any card, a webcam's microphone included.
+    pub cards: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

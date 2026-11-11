@@ -52,6 +52,8 @@ struct MachinePage {
     tiles: Vec<Spring>,
     apps: Rows,
     apps_card: gtk::Box,
+    audio: Rows,
+    audio_card: gtk::Box,
 }
 
 struct StoragePage {
@@ -130,6 +132,77 @@ fn set_temp(w: &gtk::Label, temp: Option<f32>, limit: TempLimit) {
     if let Some(t) = temp {
         w.add_css_class(limit.level(t).as_str());
     }
+}
+
+/// "48 kHz", "44.1 kHz".
+fn khz(rate: u32) -> String {
+    let k = rate as f32 / 1000.0;
+    if k.fract() == 0.0 {
+        format!("{k:.0} kHz")
+    } else {
+        format!("{k:.1} kHz")
+    }
+}
+
+/// The audio card: PipeWire's graph, each running stream, and MIDI devices.
+fn audio_rows(a: &rh_core::model::Audio) -> Vec<RowData> {
+    let mut rows = vec![];
+    if let Some(g) = &a.graph {
+        let mut right = format!(
+            "{} @ {} · {:.1} ms · DSP {:.0}%",
+            g.quantum,
+            khz(g.rate),
+            g.latency_ms(),
+            g.load
+        );
+        let mut class = "";
+        if g.xruns_minute > 0 {
+            right.push_str(&format!(" · {} dropouts/min", g.xruns_minute));
+            class = "heads-up";
+        }
+        rows.push(RowData {
+            name: "PipeWire".into(),
+            detail: g.driver.clone(),
+            right,
+            right_class: class,
+            head: true,
+            ..Default::default()
+        });
+    }
+    for s in &a.streams {
+        let what = if s.capture { "recording" } else { "playing" };
+        let detail = match &s.owner {
+            Some(o) => format!("{what} · {o}"),
+            None => what.to_string(),
+        };
+        let mut right = vec![];
+        if let Some(r) = s.rate {
+            right.push(khz(r));
+        }
+        if !s.format.is_empty() {
+            right.push(s.format.clone());
+        }
+        if let Some(c) = s.channels {
+            right.push(format!("{c} ch"));
+        }
+        if let Some(l) = s.latency_ms {
+            right.push(format!("{l:.1} ms"));
+        }
+        rows.push(RowData {
+            name: s.card.clone(),
+            detail,
+            right: right.join(" · "),
+            ..Default::default()
+        });
+    }
+    if !a.midi.is_empty() {
+        rows.push(RowData {
+            name: "MIDI".into(),
+            detail: a.midi.join(", "),
+            ..Default::default()
+        });
+    }
+    rows
 }
 
 fn tilde(p: &str) -> String {
@@ -263,11 +336,15 @@ impl Drawer {
         let apps_card = card("MEMORY BY APP", "NOT BY PID");
         let apps = Rows::new();
         apps_card.append(&apps.root);
+        let audio_card = card("AUDIO", "");
+        let audio = Rows::new();
+        audio_card.append(&audio.root);
         let mroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         mroot.append(&verdict);
         mroot.append(&session_line);
         mroot.append(&yard_line);
         mroot.append(&grid);
+        mroot.append(&audio_card);
         mroot.append(&apps_card);
         let machine = MachinePage {
             root: mroot,
@@ -284,6 +361,8 @@ impl Drawer {
             tiles,
             apps,
             apps_card,
+            audio,
+            audio_card,
         };
 
         // ---- storage page
@@ -794,6 +873,10 @@ impl Drawer {
             .collect();
         p.apps_card.set_visible(!rows.is_empty());
         p.apps.set(&rows);
+
+        let rows = audio_rows(&s.audio);
+        p.audio_card.set_visible(!rows.is_empty());
+        p.audio.set(&rows);
     }
 
     fn render_storage(&self, s: &Snapshot, cfg: &Config) {
