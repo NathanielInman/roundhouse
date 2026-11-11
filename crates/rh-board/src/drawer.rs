@@ -671,7 +671,7 @@ impl Drawer {
             Some(mhz) => format!("% · {:.1} GHz", mhz / 1000.0),
             None => "%".into(),
         });
-        p.cpu.spark.set(&m.cpu.history, 100.0);
+        p.cpu.spark.set(&m.cpu.history, &m.times, 100.0);
 
         match m.gpus.first() {
             Some(g) => {
@@ -690,7 +690,7 @@ impl Drawer {
                     unit.push_str(&format!(" · {} / {}", human(u), human(t)));
                 }
                 p.gpu.unit.set_label(&unit);
-                p.gpu.spark.set(&g.history, 100.0);
+                p.gpu.spark.set(&g.history, &m.times, 100.0);
             }
             None => p.tiles[1].set_visible(false),
         }
@@ -703,7 +703,7 @@ impl Drawer {
         });
         p.mem.value.set_label(&human(mem.used()).replace(' ', ""));
         p.mem.unit.set_label(&format!("/ {}", human(mem.total)));
-        p.mem.spark.set(&mem.history, 100.0);
+        p.mem.spark.set(&mem.history, &m.times, 100.0);
 
         let psi = |x: Option<rh_core::model::Psi>| {
             x.map(|p| format!("{:.1}", p.some10))
@@ -727,8 +727,11 @@ impl Drawer {
         p.net.value.set_label(&format!("↓ {}", rate(n.down)));
         p.net.unit.set_label(&format!("↑ {}", rate(n.up)));
         // Scale to the busiest moment on screen, at least 100 kB/s.
-        let peak = n.down_history.iter().cloned().fold(100_000.0f32, f32::max);
-        p.net.spark.set(&n.down_history, peak);
+        let peak = crate::widgets::place(&n.down_history, &m.times)
+            .iter()
+            .map(|(_, v)| *v)
+            .fold(100_000.0f32, f32::max);
+        p.net.spark.set(&n.down_history, &m.times, peak);
 
         let total = mem.total.max(1) as f64;
         let rows: Vec<RowData> = s

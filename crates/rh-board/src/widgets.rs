@@ -14,12 +14,35 @@ pub fn label(text: &str, classes: &[&str]) -> gtk::Label {
     l
 }
 
+/// The span a sparkline shows, in seconds: the last minute.
+pub const WINDOW: f64 = 60.0;
+
+/// Where each value sits across a sparkline, 0 (oldest) to 1 (now), placed by
+/// when it was sampled. `times` and `values` end at the same sample. Values
+/// older than the window are dropped, except the one just before it, so the
+/// line runs in from the left edge.
+pub fn place(values: &[f32], times: &[f64]) -> Vec<(f64, f32)> {
+    let n = values.len().min(times.len());
+    if n == 0 {
+        return vec![];
+    }
+    let (values, times) = (&values[values.len() - n..], &times[times.len() - n..]);
+    let last = times[n - 1];
+    let first = times.iter().rposition(|t| last - t >= WINDOW).unwrap_or(0);
+    (first..n)
+        .map(|i| (1.0 - (last - times[i]) / WINDOW, values[i]))
+        .collect()
+}
+
+/// Placed points and the value at the top of the chart.
+type SparkData = Rc<RefCell<(Vec<(f64, f32)>, f32)>>;
+
 /// A line chart with an area fill and an end dot, drawn in the widget's CSS
-/// `color`, so the theme picks it.
+/// `color`, so the theme picks it. Points sit by time, not by index.
 #[derive(Clone)]
 pub struct Spark {
     pub area: gtk::DrawingArea,
-    data: Rc<RefCell<(Vec<f32>, f32)>>,
+    data: SparkData,
 }
 
 impl Spark {
@@ -28,23 +51,24 @@ impl Spark {
         area.set_content_height(height);
         area.set_hexpand(true);
         area.add_css_class("spark");
-        let data: Rc<RefCell<(Vec<f32>, f32)>> = Rc::new(RefCell::new((vec![], 100.0)));
+        let data: SparkData = Rc::new(RefCell::new((vec![], 100.0)));
         let d = data.clone();
         area.set_draw_func(move |a, cr, w, h| {
-            let (values, max) = &*d.borrow();
-            if values.len() < 2 {
+            let (points, max) = &*d.borrow();
+            if points.len() < 2 {
                 return;
             }
             let c = a.color();
             let (r, g, b) = (c.red() as f64, c.green() as f64, c.blue() as f64);
             let (w, h) = (w as f64, h as f64 - 2.0);
-            let n = values.len();
+            let n = points.len();
             let pt = |i: usize| {
-                let x = i as f64 / (n - 1) as f64 * w;
-                let y = 1.0 + h - (values[i] / max.max(1.0)).clamp(0.0, 1.0) as f64 * (h - 1.0);
+                let (at, v) = points[i];
+                let x = at * w;
+                let y = 1.0 + h - (v / max.max(1.0)).clamp(0.0, 1.0) as f64 * (h - 1.0);
                 (x, y)
             };
-            cr.move_to(0.0, h + 2.0);
+            cr.move_to(pt(0).0, h + 2.0);
             for i in 0..n {
                 let (x, y) = pt(i);
                 cr.line_to(x, y);
@@ -71,8 +95,9 @@ impl Spark {
         Spark { area, data }
     }
 
-    pub fn set(&self, values: &[f32], max: f32) {
-        *self.data.borrow_mut() = (values.to_vec(), max);
+    /// `times` are the sample times shared by every series (`Machine::times`).
+    pub fn set(&self, values: &[f32], times: &[f64], max: f32) {
+        *self.data.borrow_mut() = (place(values, times), max);
         self.area.queue_draw();
     }
 }
@@ -241,5 +266,33 @@ impl Rows {
         for (r, d) in rows.iter().zip(items) {
             r.set(d);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sparklines_follow_time_not_index() {
+        // Five-second samples while closed, then one-second samples once the
+        // drawer opens.
+        let times = [0.0, 5.0, 10.0, 60.0, 65.0, 66.0, 67.0];
+        let values = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let p = place(&values, &times);
+        // The window is the last minute; 5.0 is just before it and stays so
+        // the line enters from the left edge.
+        assert_eq!(p.first(), Some(&(1.0 - 62.0 / 60.0, 2.0)));
+        assert_eq!(p.last(), Some(&(1.0, 7.0)));
+        // 65 s and 66 s are one second apart, not one slot.
+        let (a, b) = (p[p.len() - 3].0, p[p.len() - 2].0);
+        assert!((b - a - 1.0 / 60.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn series_align_at_their_end() {
+        // CPU skips the first sample, so it is one shorter than the times.
+        let p = place(&[10.0, 20.0], &[0.0, 1.0, 2.0]);
+        assert_eq!(p, vec![(1.0 - 1.0 / 60.0, 10.0), (1.0, 20.0)]);
     }
 }

@@ -82,7 +82,11 @@ at once, so the drawer never opens on old data for long.
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
 | Switchyard | its socket | every 2 s open, 15 s closed |
 
-Sparklines keep the last 60 samples.
+Sparklines keep the last 60 samples, and `machine.times` says when each was
+taken. The drawer draws them against time over the last minute, so the
+five-second samples from while it was closed sit five seconds apart, not one
+slot. Ticks keep a fixed rate: the next one is due an interval after the last
+was due, not after the work finished.
 
 ### Storage rules
 

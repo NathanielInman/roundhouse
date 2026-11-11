@@ -278,6 +278,10 @@ fn sampler(shared: Shared) {
     let mut mtime = config_mtime();
     let mut lamp = rh_core::lamp::LampState::new();
     let (lock, cv) = &*shared;
+    // Ticks keep a fixed rate: the next one is due an interval after the
+    // last was due, not an interval after the work finished.
+    let mut due = Instant::now();
+    let mut was_visible = false;
     loop {
         let (cfg, cfg_error, visible, switchyard) = {
             let mut st = lock.lock().unwrap();
@@ -316,9 +320,16 @@ fn sampler(shared: Shared) {
             st.bar_line = bar.clone();
             broadcast(&mut st.bars, &bar);
         }
-        // Sleep until the next tick, or until the drawer opens.
-        let wait = if st.visible { OPEN_EVERY } else { CLOSED_EVERY };
-        let was_visible = st.visible;
+        // Sleep until the next tick, or until the drawer opens or closes.
+        let every = if st.visible { OPEN_EVERY } else { CLOSED_EVERY };
+        let now = Instant::now();
+        due = if st.visible != was_visible { now } else { due } + every;
+        if due < now {
+            // Fell behind (a suspend, a slow share): start over from now.
+            due = now + every;
+        }
+        was_visible = st.visible;
+        let wait = due - now;
         let _ = cv
             .wait_timeout_while(st, wait, |s| s.visible == was_visible)
             .unwrap();

@@ -35,6 +35,12 @@ pub struct Machine {
     pub gpus: Vec<Gpu>,
     #[serde(default)]
     pub network: Network,
+    /// When each recent sample was taken (Unix seconds), oldest first. Every
+    /// `history` series ends at the same sample as this list, so sparklines
+    /// can be drawn against time: samples come every 5 s while the drawer is
+    /// closed and every second while it is open.
+    #[serde(default)]
+    pub times: Vec<f64>,
 }
 
 /// Throughput summed over the interfaces backed by real devices.

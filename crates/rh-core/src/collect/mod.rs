@@ -55,6 +55,8 @@ pub struct Collector {
     disks: Vec<Disk>,
     disks_at: Option<Instant>,
     apps: Vec<AppUsage>,
+    /// When each recent sample was taken.
+    times: VecDeque<f64>,
     /// Intel's package throttle count on the last sample.
     throttle_count: Option<u64>,
 }
@@ -80,6 +82,7 @@ impl Collector {
             disks_at: None,
             apps: vec![],
             throttle_count: None,
+            times: VecDeque::with_capacity(HISTORY),
         }
     }
 
@@ -169,6 +172,11 @@ impl Collector {
             self.apps = apps::sample(8);
         }
 
+        let now = crate::now();
+        if self.times.len() == HISTORY {
+            self.times.pop_front();
+        }
+        self.times.push_back(now);
         Snapshot {
             host,
             machine: Machine {
@@ -177,10 +185,11 @@ impl Collector {
                 pressure,
                 gpus,
                 network,
+                times: self.times.iter().copied().collect(),
             },
             disks: self.disks.clone(),
             apps: if deep { self.apps.clone() } else { vec![] },
-            now: crate::now(),
+            now,
             ..Default::default()
         }
     }
