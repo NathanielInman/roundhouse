@@ -18,7 +18,8 @@ Usage:
   rh bar                              the waybar module (prints JSON lines)
   rh session [on|off|toggle]          a recording session: Switchyard holds heavy
                                       builds until it ends (no argument: show it)
-  rh status [--json]                  print what the drawer shows
+  rh status [--json] [--show-ip]      print what the drawer shows (the public
+                                      IP stays hidden without --show-ip)
   rh history [--since 24h] [--json]   what the lamp said, and when
   rh doctor [--audio]                 check the setup (--audio: is it fit to record?)
   rh daemon                           run the daemon in the foreground
@@ -63,7 +64,7 @@ pub fn run(args: &[String]) -> Result<i32> {
             }
             Ok(0)
         }
-        Some("status") => status(flag(rest, "--json")),
+        Some("status") => status(flag(rest, "--json"), flag(rest, "--show-ip")),
         Some("session") => session(rest.first().map(String::as_str)),
         Some("history") => history(
             value(rest, "--since").as_deref().unwrap_or("24h"),
@@ -287,7 +288,7 @@ fn session(arg: Option<&str>) -> Result<i32> {
     Ok(0)
 }
 
-fn status(json: bool) -> Result<i32> {
+fn status(json: bool, show_ip: bool) -> Result<i32> {
     let (s, _) = snapshot();
     if json {
         println!("{}", serde_json::to_string_pretty(&s)?);
@@ -379,11 +380,15 @@ fn status(json: bool) -> Result<i32> {
         rate(n.up),
         n.interfaces.join(", ")
     );
-    if let Some(ip) = &n.public_ip {
-        net.push_str(&format!("  public {ip}"));
-    }
-    if let Some(ip) = &n.public_ipv6 {
-        net.push_str(&format!("  {ip}"));
+    // Hidden unless asked for, so a shared terminal does not give it away.
+    match (&n.public_ip, &n.public_ipv6) {
+        (None, None) => {}
+        _ if !show_ip => net.push_str("  public IP hidden (--show-ip)"),
+        (v4, v6) => {
+            for ip in [v4, v6].into_iter().flatten() {
+                net.push_str(&format!("  public {ip}"));
+            }
+        }
     }
     match n.nat_keeps_port {
         Some(true) => net.push_str("  (NAT keeps ports)"),

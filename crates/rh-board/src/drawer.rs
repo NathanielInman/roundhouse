@@ -76,6 +76,9 @@ struct NetworkPage {
     path: Rows,
     hosts: Rows,
     hosts_card: gtk::Box,
+    /// Shows the public IP for a moment; it is hidden otherwise, so a
+    /// screenshot or a shared screen does not give it away.
+    ip_button: gtk::Button,
 }
 
 pub struct Drawer {
@@ -103,7 +106,14 @@ pub struct Drawer {
     /// The dot on the Switchyard link, colored by Switchyard's phase.
     yard_dot: gtk::Label,
     foot: gtk::Label,
+    /// The public IP is showing.
+    ip_shown: Cell<bool>,
+    /// Counts reveals, so only the latest one's timer hides it again.
+    ip_reveals: Cell<u32>,
 }
+
+/// How long a revealed public IP stays on screen.
+const IP_SHOWN_FOR: std::time::Duration = std::time::Duration::from_secs(15);
 
 fn send_quiet(req: Request) {
     std::thread::spawn(move || {
@@ -187,7 +197,8 @@ fn port_rows(ports: &[rh_core::model::Port]) -> Vec<RowData> {
 }
 
 /// The way out, hop by hop: route, router, internet, DNS.
-fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
+/// `show_ip` reveals the public address; otherwise it reads "hidden".
+fn path_rows(n: &rh_core::model::Network, show_ip: bool) -> Vec<RowData> {
     let mut rows = vec![];
     let hop = |name: &str, r: &rh_core::model::Reach, detail: String| {
         let (right, class) = match (r.ok, r.ms) {
@@ -295,7 +306,11 @@ fn path_rows(n: &rh_core::model::Network) -> Vec<RowData> {
             .collect();
         rows.push(RowData {
             name: "Public IP".into(),
-            detail: ips.join(" · "),
+            detail: if show_ip {
+                ips.join(" · ")
+            } else {
+                "hidden".into()
+            },
             right: match n.nat_keeps_port {
                 Some(true) => "NAT keeps ports".into(),
                 Some(false) => "NAT changes ports per peer".into(),
@@ -561,6 +576,11 @@ impl Drawer {
         let prows = Rows::new();
         let pcard = card("WAY OUT", "");
         pcard.append(&prows.root);
+        let ip_button = gtk::Button::with_label("Show public IP");
+        ip_button.add_css_class("yard-line");
+        ip_button.set_tooltip_text(Some("Shows it for 15 seconds"));
+        ip_button.set_visible(false);
+        pcard.append(&ip_button);
         let hrows = Rows::new();
         let hcard = card("OTHER MACHINES", "");
         hcard.append(&hrows.root);
@@ -575,6 +595,7 @@ impl Drawer {
             path: prows,
             hosts: hrows,
             hosts_card: hcard,
+            ip_button,
         };
 
         // ---- ports page
@@ -654,6 +675,8 @@ impl Drawer {
             ports,
             yard_dot,
             foot,
+            ip_shown: Cell::new(false),
+            ip_reveals: Cell::new(0),
         });
 
         *d.me.borrow_mut() = Rc::downgrade(&d);
@@ -673,6 +696,14 @@ impl Drawer {
             b.connect_clicked(move |_| {
                 if let Some(d) = w.upgrade() {
                     d.select(&id);
+                }
+            });
+        }
+        {
+            let w = Rc::downgrade(&d);
+            d.network.ip_button.connect_clicked(move |_| {
+                if let Some(d) = w.upgrade() {
+                    d.toggle_ip();
                 }
             });
         }
@@ -846,10 +877,31 @@ impl Drawer {
         }
     }
 
+    /// Shows the public IP for 15 s, or hides it now.
+    fn toggle_ip(self: &Rc<Self>) {
+        let shown = !self.ip_shown.get();
+        self.ip_shown.set(shown);
+        let n = self.ip_reveals.get().wrapping_add(1);
+        self.ip_reveals.set(n);
+        if shown {
+            let w = Rc::downgrade(self);
+            glib::timeout_add_local_once(IP_SHOWN_FOR, move || {
+                if let Some(d) = w.upgrade() {
+                    if d.ip_reveals.get() == n {
+                        d.ip_shown.set(false);
+                        d.render();
+                    }
+                }
+            });
+        }
+        self.render();
+    }
+
     fn hide(self: &Rc<Self>) {
         if !self.visible.replace(false) {
             return;
         }
+        self.ip_shown.set(false);
         let w = Rc::downgrade(self);
         self.spring.play_out(move || {
             if let Some(d) = w.upgrade() {
@@ -1052,7 +1104,8 @@ impl Drawer {
             [] => "NETWORK".to_string(),
             ifs => format!("NETWORK · {}", ifs.join(" + ").to_uppercase()),
         });
-        p.net.aside.set_label(n.public_ip.as_deref().unwrap_or(""));
+        // The public IP lives on the Network tab, hidden until asked for.
+        p.net.aside.set_label("");
         p.net.value.set_label(&format!("↓ {}", rate(n.down)));
         p.net.unit.set_label(&format!("↑ {}", rate(n.up)));
         // Scale to the busiest moment on screen, at least 100 kB/s.
@@ -1166,7 +1219,16 @@ impl Drawer {
             })
             .collect();
         self.network.links.set(&rows);
-        self.network.path.set(&path_rows(&s.machine.network));
+        let n = &s.machine.network;
+        let has_ip = n.public_ip.is_some() || n.public_ipv6.is_some();
+        let shown = self.ip_shown.get();
+        self.network.path.set(&path_rows(n, shown));
+        self.network.ip_button.set_visible(has_ip);
+        self.network.ip_button.set_label(if shown {
+            "Hide public IP"
+        } else {
+            "Show public IP"
+        });
         let hosts: Vec<RowData> = s
             .remotes
             .iter()
