@@ -13,6 +13,9 @@
 //! wants the numbers (the drawer is open, or a recording session is on) and
 //! hangs up otherwise.
 
+// The watcher only runs on Unix; elsewhere the protocol code sits unused.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
+
 use crate::model::AudioGraph;
 use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
