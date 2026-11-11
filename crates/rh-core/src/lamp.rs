@@ -24,6 +24,11 @@ const DISK_MARGIN: f32 = 1.0;
 const PRESSURE_MARGIN: f32 = 2.0;
 const FREE_MARGIN: f32 = 1.0;
 
+/// Bad frames per minute on one link before it is worth a light.
+const LINK_ERRORS: u64 = 10;
+/// Down-and-up cycles per minute before a link counts as flapping.
+const LINK_FLAPS: u64 = 2;
+
 /// What kind of rule raised a reason, which sets its attack times.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
@@ -218,6 +223,53 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
             );
         }
     }
+    // Links: a cable that renegotiated down, bad frames, a link that flaps.
+    for l in &m.network.links {
+        if !l.up {
+            continue;
+        }
+        if let (Some(s), Some(best)) = (l.speed, l.best_speed) {
+            if s < best {
+                r.push(
+                    format!("link.speed:{}", l.name),
+                    Level::HeadsUp,
+                    "network",
+                    format!(
+                        "{} linked at {} (it had {}): check the cable",
+                        l.name,
+                        crate::collect::net::speed(s),
+                        crate::collect::net::speed(best)
+                    ),
+                    Kind::Steady,
+                );
+            }
+        }
+        if l.errors_minute >= LINK_ERRORS {
+            r.push(
+                format!("link.errors:{}", l.name),
+                Level::HeadsUp,
+                "network",
+                format!(
+                    "{} saw {} bad frames in the last minute",
+                    l.name, l.errors_minute
+                ),
+                Kind::Steady,
+            );
+        }
+        if l.flaps_minute >= LINK_FLAPS {
+            r.push(
+                format!("link.flaps:{}", l.name),
+                Level::HeadsUp,
+                "network",
+                format!(
+                    "{} dropped its link {} times in the last minute",
+                    l.name, l.flaps_minute
+                ),
+                Kind::Steady,
+            );
+        }
+    }
+
     // Fans are noise in the take: worth a light only while recording.
     if s.session.is_some() {
         let mut loud: Vec<String> = m
@@ -658,5 +710,25 @@ mod tests {
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.reasons[0].text, "fans are loud: nct6798 fan2 2100 RPM");
         assert_eq!(hold(&lamp, None), None);
+    }
+
+    #[test]
+    fn a_renegotiated_link_is_a_heads_up() {
+        let mut s = Snapshot::default();
+        s.machine.network.links.push(crate::model::Link {
+            name: "eno1".into(),
+            up: true,
+            speed: Some(100),
+            best_speed: Some(2500),
+            errors_minute: 3,
+            ..Default::default()
+        });
+        let lamp = evaluate(&s, &LampConfig::default());
+        assert_eq!(lamp.reasons.len(), 1);
+        assert_eq!(
+            lamp.reasons[0].text,
+            "eno1 linked at 100 Mb/s (it had 2.5 Gb/s): check the cable"
+        );
+        assert_eq!(lamp.reasons[0].tab, "network");
     }
 }

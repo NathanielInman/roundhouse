@@ -81,7 +81,12 @@ impl Default for DrawerConfig {
             width: 460.0,
             max_height: 0.8,
             gap: 8.0,
-            tabs: vec!["machine".into(), "storage".into(), "switchyard".into()],
+            tabs: vec![
+                "machine".into(),
+                "storage".into(),
+                "network".into(),
+                "switchyard".into(),
+            ],
         }
     }
 }
@@ -206,12 +211,23 @@ impl LampConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct NetworkConfig {
     /// Show the public IP. Off by default because it asks a third party
     /// (ifconfig.co, over plain HTTP) once a minute while the drawer is open.
     pub public_ip: bool,
+    /// `bytes` (kB/s, the default) or `bits` (Mb/s, like link speeds).
+    pub units: String,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        NetworkConfig {
+            public_ip: false,
+            units: "bytes".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

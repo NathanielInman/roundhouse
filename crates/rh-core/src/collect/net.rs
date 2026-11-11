@@ -8,9 +8,9 @@
 //! thread with one plain HTTP request, only while the drawer is open, at most
 //! once a minute, so a sample never waits on the network.
 
-use super::{push_hist, read_trim};
-use crate::model::Network;
-use std::collections::VecDeque;
+use super::{push_hist, read, read_trim};
+use crate::model::{Link, Network};
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
@@ -27,9 +27,26 @@ struct IpState {
     busy: bool,
 }
 
+/// One interface's counters on the last sample.
+#[derive(Debug, Clone, Copy, Default)]
+struct Counters {
+    rx: u64,
+    tx: u64,
+    errors: u64,
+    carrier: u64,
+}
+
+#[derive(Default)]
+struct LinkState {
+    prev: Option<(Instant, Counters)>,
+    best_speed: Option<u32>,
+    /// Error and flap increments with when they were seen.
+    events: VecDeque<(Instant, u64, u64)>,
+}
+
 #[derive(Default)]
 pub struct NetReader {
-    prev: Option<(Instant, u64, u64)>,
+    links: HashMap<String, LinkState>,
     down: VecDeque<f32>,
     up: VecDeque<f32>,
     ip: Arc<Mutex<IpState>>,
@@ -51,6 +68,27 @@ pub fn physical(root: &Path) -> Vec<(String, bool)> {
         .collect();
     out.sort();
     out
+}
+
+/// `/proc/net/wireless`: signal level in dBm by interface.
+pub fn parse_wireless(text: &str) -> Vec<(String, f32)> {
+    text.lines()
+        .skip(2)
+        .filter_map(|l| {
+            let (name, rest) = l.split_once(':')?;
+            let level = rest.split_whitespace().nth(2)?;
+            Some((
+                name.trim().to_string(),
+                level.trim_end_matches('.').parse().ok()?,
+            ))
+        })
+        .collect()
+}
+
+/// How far a counter moved, or 0 when it went backwards (the interface was
+/// replugged or reset).
+fn delta(now: u64, prev: u64) -> u64 {
+    now.saturating_sub(prev)
 }
 
 /// Pulls the address out of an HTTP response whose body is just the IP.
@@ -101,37 +139,90 @@ impl NetReader {
 
     pub fn sample(&mut self, deep: bool, public_ip: bool) -> Network {
         let root = Path::new("/sys/class/net");
+        let wireless = read("/proc/net/wireless")
+            .map(|t| parse_wireless(&t))
+            .unwrap_or_default();
+        let now = Instant::now();
+        let minute = Duration::from_secs(60);
+        let mut links = vec![];
+        let (mut down, mut up) = (0.0, 0.0);
+        let mut have_rates = false;
         let ifaces = physical(root);
-        let (mut rx, mut tx) = (0u64, 0u64);
-        for (name, _) in &ifaces {
+        for (name, is_up) in &ifaces {
+            let dir = root.join(name);
             let stat = |f: &str| {
-                read_trim(root.join(name).join("statistics").join(f))
+                read_trim(dir.join("statistics").join(f))
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(0)
             };
-            rx += stat("rx_bytes");
-            tx += stat("tx_bytes");
-        }
-        let now = Instant::now();
-        let (mut down, mut up) = (0.0, 0.0);
-        if let Some((t, prx, ptx)) = self.prev {
-            let dt = now.duration_since(t).as_secs_f64();
-            if dt > 0.0 {
-                down = rx.saturating_sub(prx) as f64 / dt;
-                up = tx.saturating_sub(ptx) as f64 / dt;
+            let c = Counters {
+                rx: stat("rx_bytes"),
+                tx: stat("tx_bytes"),
+                errors: stat("rx_errors") + stat("tx_errors"),
+                carrier: read_trim(dir.join("carrier_changes"))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+            };
+            // `speed` reads -1 or fails while the link is down or wireless.
+            let speed = read_trim(dir.join("speed"))
+                .and_then(|v| v.parse::<i64>().ok())
+                .filter(|s| *s > 0)
+                .map(|s| s as u32);
+            let st = self.links.entry(name.clone()).or_default();
+            if let Some(s) = speed {
+                st.best_speed = Some(st.best_speed.map_or(s, |b| b.max(s)));
             }
+            let (mut rd, mut wr) = (0.0, 0.0);
+            if let Some((t, p)) = st.prev {
+                let dt = now.duration_since(t).as_secs_f64();
+                if dt > 0.0 {
+                    rd = delta(c.rx, p.rx) as f64 / dt;
+                    wr = delta(c.tx, p.tx) as f64 / dt;
+                    have_rates = true;
+                }
+                let (e, f) = (delta(c.errors, p.errors), delta(c.carrier, p.carrier));
+                if e > 0 || f > 0 {
+                    st.events.push_back((now, e, f));
+                }
+            }
+            while st
+                .events
+                .front()
+                .is_some_and(|(t, _, _)| now.duration_since(*t) > minute)
+            {
+                st.events.pop_front();
+            }
+            st.prev = Some((now, c));
+            down += rd;
+            up += wr;
+            links.push(Link {
+                name: name.clone(),
+                up: *is_up,
+                speed,
+                best_speed: st.best_speed,
+                down: rd,
+                up_rate: wr,
+                errors_minute: st.events.iter().map(|e| e.1).sum(),
+                // A carrier change counts down and up separately.
+                flaps_minute: st.events.iter().map(|e| e.2).sum::<u64>() / 2,
+                signal_dbm: wireless.iter().find(|(n, _)| n == name).map(|(_, s)| *s),
+                wireless: dir.join("wireless").exists(),
+            });
+        }
+        // Forget interfaces that went away, so a replug starts fresh.
+        self.links.retain(|n, _| ifaces.iter().any(|(i, _)| i == n));
+        if have_rates {
             push_hist(&mut self.down, down as f32);
             push_hist(&mut self.up, up as f32);
         }
-        self.prev = Some((now, rx, tx));
         if public_ip && deep {
             self.refresh_ip();
         }
         Network {
             interfaces: ifaces
-                .into_iter()
+                .iter()
                 .filter(|(_, up)| *up)
-                .map(|(n, _)| n)
+                .map(|(n, _)| n.clone())
                 .collect(),
             down,
             up,
@@ -142,7 +233,46 @@ impl NetReader {
             } else {
                 None
             },
+            links,
         }
+    }
+}
+
+/// Link speed the way it is sold: "2.5 Gb/s", "100 Mb/s".
+pub fn speed(mbps: u32) -> String {
+    if mbps >= 1000 {
+        let g = mbps as f32 / 1000.0;
+        if g.fract() == 0.0 {
+            format!("{g:.0} Gb/s")
+        } else {
+            format!("{g:.1} Gb/s")
+        }
+    } else {
+        format!("{mbps} Mb/s")
+    }
+}
+
+/// A rate in bits per second, the way link speeds are given.
+pub fn rate_bits(bps: f64) -> String {
+    let b = bps * 8.0;
+    if b < 1000.0 {
+        format!("{b:.0} b/s")
+    } else if b < 1_000_000.0 {
+        format!("{:.0} kb/s", b / 1000.0)
+    } else if b < 1_000_000_000.0 {
+        format!("{:.1} Mb/s", b / 1_000_000.0)
+    } else {
+        format!("{:.2} Gb/s", b / 1_000_000_000.0)
+    }
+}
+
+/// A rate in the units `network.units` asks for: "bytes" (the default) or
+/// "bits".
+pub fn rate_in(bps: f64, units: &str) -> String {
+    if units == "bits" {
+        rate_bits(bps)
+    } else {
+        rate(bps)
     }
 }
 
@@ -186,5 +316,26 @@ mod tests {
         std::fs::create_dir_all(root.join("lo")).unwrap();
         assert_eq!(physical(&root), vec![("eno1".to_string(), true)]);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn wireless_signal() {
+        // /proc/net/wireless with an associated Intel card.
+        let text =
+            "Inter-| sta-|   Quality        |   Discarded packets               | Missed | WE
+ face | tus | link level noise |  nwid  crypt   frag  retry   misc | beacon | 22
+wlp8s0: 0000   54.  -56.  -256        0      0      0      0     21        0
+";
+        assert_eq!(parse_wireless(text), vec![("wlp8s0".to_string(), -56.0)]);
+    }
+
+    #[test]
+    fn speeds_and_bits() {
+        assert_eq!(speed(2500), "2.5 Gb/s");
+        assert_eq!(speed(1000), "1 Gb/s");
+        assert_eq!(speed(100), "100 Mb/s");
+        assert_eq!(rate_bits(125_000.0), "1.0 Mb/s");
+        assert_eq!(rate_in(84_000.0, "bytes"), "84 kB/s");
+        assert_eq!(delta(5, 9), 0);
     }
 }

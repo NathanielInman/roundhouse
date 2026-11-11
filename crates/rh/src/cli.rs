@@ -330,16 +330,39 @@ fn status(json: bool) -> Result<i32> {
         println!("{:<12}{}", "fans", fans.join("  "));
     }
     let n = &m.network;
+    let units = Config::load().0.network.units;
+    let rate = |b: f64| rh_core::collect::net::rate_in(b, &units);
     let mut net = format!(
         "down {}  up {}  ({})",
-        rh_core::collect::net::rate(n.down),
-        rh_core::collect::net::rate(n.up),
+        rate(n.down),
+        rate(n.up),
         n.interfaces.join(", ")
     );
     if let Some(ip) = &n.public_ip {
         net.push_str(&format!("  public {ip}"));
     }
     println!("{:<12}{net}", "network");
+    for l in &n.links {
+        let mut line = l.name.clone();
+        if let Some(sp) = l.speed {
+            line.push_str(&format!("  {}", rh_core::collect::net::speed(sp)));
+        }
+        if let Some(dbm) = l.signal_dbm {
+            line.push_str(&format!("  {dbm:.0} dBm"));
+        }
+        if l.up {
+            line.push_str(&format!("  down {}  up {}", rate(l.down), rate(l.up_rate)));
+        } else {
+            line.push_str("  down (no link)");
+        }
+        if l.errors_minute > 0 {
+            line.push_str(&format!("  {} errors/min", l.errors_minute));
+        }
+        if l.flaps_minute > 0 {
+            line.push_str(&format!("  {} link drops/min", l.flaps_minute));
+        }
+        println!("{:<12}{line}", "");
+    }
     let a = &s.audio;
     if let Some(g) = &a.graph {
         println!(

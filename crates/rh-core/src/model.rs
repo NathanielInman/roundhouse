@@ -63,6 +63,31 @@ pub struct Network {
     pub up_history: Vec<f32>,
     /// Only when `network.public_ip` is on.
     pub public_ip: Option<String>,
+    /// Each interface backed by a device, up or down.
+    #[serde(default)]
+    pub links: Vec<Link>,
+}
+
+/// One network interface backed by a device (`eno1`, `wlp8s0`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Link {
+    pub name: String,
+    pub up: bool,
+    /// Negotiated speed in Mb/s (wired links).
+    pub speed: Option<u32>,
+    /// The fastest speed this link has negotiated since the daemon started.
+    pub best_speed: Option<u32>,
+    /// Bytes per second.
+    pub down: f64,
+    pub up_rate: f64,
+    /// Receive and transmit errors in the last minute (bad frames, not the
+    /// drops every LAN has).
+    pub errors_minute: u64,
+    /// Times the link went down and up in the last minute.
+    pub flaps_minute: u64,
+    /// Wi-Fi signal in dBm, for wireless links.
+    pub signal_dbm: Option<f32>,
+    pub wireless: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

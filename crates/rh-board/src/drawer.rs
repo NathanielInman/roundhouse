@@ -29,9 +29,10 @@ const YARD_PHASES: [&str; 7] = [
     "idle", "queued", "waiting", "building", "running", "ok", "failed",
 ];
 
-const TABS: [(&str, &str); 3] = [
+const TABS: [(&str, &str); 4] = [
     ("machine", "Machine"),
     ("storage", "Storage"),
+    ("network", "Network"),
     ("switchyard", "Switchyard"),
 ];
 
@@ -63,6 +64,11 @@ struct StoragePage {
     rows: Rows,
 }
 
+struct NetworkPage {
+    root: gtk::Box,
+    links: Rows,
+}
+
 pub struct Drawer {
     /// Itself, for handlers created while rendering.
     me: RefCell<std::rc::Weak<Drawer>>,
@@ -83,6 +89,7 @@ pub struct Drawer {
     stack: gtk::Stack,
     machine: MachinePage,
     storage: StoragePage,
+    network: NetworkPage,
     /// The dot on the Switchyard link, colored by Switchyard's phase.
     yard_dot: gtk::Label,
     foot: gtk::Label,
@@ -383,12 +390,27 @@ impl Drawer {
             rows: srows,
         };
 
+        // ---- network page
+        let lrows = Rows::new();
+        let lcard = card("LINKS", "");
+        lcard.append(&lrows.root);
+        let nroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        nroot.append(&lcard);
+        let network = NetworkPage {
+            root: nroot,
+            links: lrows,
+        };
+
         let stack = gtk::Stack::new();
         stack.set_transition_type(gtk::StackTransitionType::SlideLeftRight);
         stack.set_transition_duration(220);
         stack.set_vhomogeneous(false);
         stack.set_interpolate_size(true);
-        for (id, page) in [("machine", &machine.root), ("storage", &storage.root)] {
+        for (id, page) in [
+            ("machine", &machine.root),
+            ("storage", &storage.root),
+            ("network", &network.root),
+        ] {
             stack.add_named(page, Some(id));
         }
         let scroller = gtk::ScrolledWindow::new();
@@ -440,6 +462,7 @@ impl Drawer {
             stack,
             machine,
             storage,
+            network,
             yard_dot,
             foot,
         });
@@ -705,6 +728,7 @@ impl Drawer {
 
         self.render_machine(s, &cfg);
         self.render_storage(s, &cfg);
+        self.render_network(s, &cfg);
         let n_tabs = self.tabs.iter().filter(|(_, b)| b.is_visible()).count();
         self.foot
             .set_label(&format!("1-{n_tabs} tabs · Esc close · {}", s.host.os));
@@ -832,7 +856,8 @@ impl Drawer {
         ));
 
         let n = &m.network;
-        let rate = rh_core::collect::net::rate;
+        let units = cfg.network.units.clone();
+        let rate = |b: f64| rh_core::collect::net::rate_in(b, &units);
         p.net.title.set_label(&match n.interfaces.as_slice() {
             [] => "NETWORK".to_string(),
             ifs => format!("NETWORK · {}", ifs.join(" + ").to_uppercase()),
@@ -897,6 +922,60 @@ impl Drawer {
         let rows = audio_rows(&s.audio);
         p.audio_card.set_visible(!rows.is_empty());
         p.audio.set(&rows);
+    }
+
+    fn render_network(&self, s: &Snapshot, cfg: &Config) {
+        let units = &cfg.network.units;
+        let rate = |b: f64| rh_core::collect::net::rate_in(b, units);
+        let rows: Vec<RowData> = s
+            .machine
+            .network
+            .links
+            .iter()
+            .map(|l| {
+                let mut detail = vec![];
+                if l.wireless {
+                    detail.push("Wi-Fi".to_string());
+                }
+                if let Some(sp) = l.speed {
+                    detail.push(rh_core::collect::net::speed(sp));
+                }
+                if let Some(dbm) = l.signal_dbm {
+                    detail.push(format!("{dbm:.0} dBm"));
+                }
+                if !l.up {
+                    detail.push("down".into());
+                }
+                let slow = matches!((l.speed, l.best_speed), (Some(a), Some(b)) if a < b);
+                let mut right = if l.up {
+                    format!("↓ {} ↑ {}", rate(l.down), rate(l.up_rate))
+                } else {
+                    String::new()
+                };
+                if l.errors_minute > 0 {
+                    right = format!("{} errors/min · {right}", l.errors_minute);
+                }
+                if l.flaps_minute > 0 {
+                    right = format!("{} drops/min · {right}", l.flaps_minute);
+                }
+                let trouble = slow || l.errors_minute >= 10 || l.flaps_minute >= 2;
+                // How full the link is, both directions against its speed.
+                let meter = l
+                    .speed
+                    .filter(|_| l.up)
+                    .map(|sp| (l.down.max(l.up_rate) * 8.0) / (sp as f64 * 1_000_000.0));
+                RowData {
+                    name: l.name.clone(),
+                    detail: detail.join(" · "),
+                    right,
+                    right_class: if trouble { "heads-up" } else { "" },
+                    meter,
+                    meter_class: if trouble { "heads-up" } else { "calm" },
+                    head: false,
+                }
+            })
+            .collect();
+        self.network.links.set(&rows);
     }
 
     fn render_storage(&self, s: &Snapshot, cfg: &Config) {

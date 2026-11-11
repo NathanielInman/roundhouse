@@ -77,7 +77,7 @@ at once, so the drawer never opens on old data for long.
 | Pressure | `/proc/pressure/{cpu,memory,io}` | every sample |
 | NVIDIA | NVML, loaded at runtime once | every sample |
 | AMD | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `mem_info_vram_*`); names from `pci.ids` | every sample |
-| Network | `/sys/class/net/*/statistics` for interfaces with a `device` link (no loopback, bridges or veths) | every sample |
+| Network | `/sys/class/net/*/statistics`, `speed` and `carrier_changes` for interfaces with a `device` link (no loopback, bridges or veths), counted per interface so a replugged NIC never spikes the total; `/proc/net/wireless` for Wi-Fi signal | every sample |
 | Public IP | one plain HTTP `GET /ip` to ifconfig.co on a helper thread, opt-in with `network.public_ip` | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
@@ -139,6 +139,9 @@ the drawer shows reasons as links to that tab.
 | Memory pressure | PSI `some` avg60 at `mem_pressure_warn` (10) | PSI `full` avg10 at `mem_pressure_act` (10) |
 | Free memory | | under `mem_free_act` (5%) |
 | Audio dropouts | any PipeWire xrun in the last minute, during a recording session only | |
+| Link speed | a link up below the best speed it negotiated since the daemon started (a bad cable) | |
+| Link errors | 10 receive or transmit errors in a minute (drops do not count; every LAN has them) | |
+| Link flaps | 2 down-and-up cycles in a minute | |
 | Loud fans | a fan at `fan_loud_rpm` (1600) or a GPU fan at `fan_loud_pct` (60%), during a recording session only | |
 
 Read-only filesystems, stale shares and automount points never count.
