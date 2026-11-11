@@ -35,6 +35,7 @@ impl GpuReader {
 
     #[cfg(target_os = "linux")]
     fn nvidia(&mut self) -> Vec<Gpu> {
+        use nvml_wrapper::bitmasks::device::ThrottleReasons;
         use nvml_wrapper::enum_wrappers::device::{TemperatureSensor, TemperatureThreshold};
         if !self.nvml_tried {
             self.nvml_tried = true;
@@ -66,6 +67,12 @@ impl GpuReader {
                     vram_used: mem.as_ref().map(|m| m.used),
                     vram_total: mem.as_ref().map(|m| m.total),
                     power_w: d.power_usage().ok().map(|mw| mw as f32 / 1000.0),
+                    throttling: d.current_throttle_reasons().is_ok_and(|r| {
+                        r.intersects(
+                            ThrottleReasons::HW_THERMAL_SLOWDOWN
+                                | ThrottleReasons::SW_THERMAL_SLOWDOWN,
+                        )
+                    }),
                     history: vec![],
                 }
             })
@@ -122,6 +129,7 @@ impl GpuReader {
                 vram_used: num("mem_info_vram_used"),
                 vram_total: num("mem_info_vram_total"),
                 power_w: None,
+                throttling: false,
                 history: vec![],
             });
         }

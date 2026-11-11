@@ -31,7 +31,10 @@ Roundhouse replaces.
 
 - **One lamp.** The bar shows a single dot. It turns amber or red only when
   something needs you: a filesystem filling up, a drive or CPU running hot,
-  memory pressure. The tooltip says why, and a click shows the rest.
+  memory pressure. The tooltip says why, and a click shows the rest. A
+  two-second spike does not change it, a CPU boosting to its limit is not an
+  alarm until it sits there, and a value hovering at a line does not make it
+  flicker.
 - **Temperatures against their limits.** What counts as hot depends on the
   part, so Roundhouse asks each one: the drive's own warning temperature,
   the CPU's TjMax, the point where the GPU slows down. Every reading shows
@@ -151,6 +154,9 @@ disk_act = 95
 # Temperatures follow each part's own limit: heads-up 10°C under it, act at
 # it. Set a key only to override that.
 # cpu_temp_act = 90   # °C
+attack = 10           # seconds a temperature stays high before the lamp rises
+sustain = 30          # seconds at its limit before act (CPUs boost to it)
+release = 30          # seconds clear before the lamp falls
 
 [network]
 public_ip = false     # true asks ifconfig.co once a minute while the drawer is open

@@ -55,6 +55,8 @@ pub struct Collector {
     disks: Vec<Disk>,
     disks_at: Option<Instant>,
     apps: Vec<AppUsage>,
+    /// Intel's package throttle count on the last sample.
+    throttle_count: Option<u64>,
 }
 
 impl Default for Collector {
@@ -77,6 +79,7 @@ impl Collector {
             disks: vec![],
             disks_at: None,
             apps: vec![],
+            throttle_count: None,
         }
     }
 
@@ -110,6 +113,12 @@ impl Collector {
                 self.mhz = mhz;
             }
         }
+        // Intel counts each time the package slowed itself for heat.
+        let count =
+            read_trim("/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count")
+                .and_then(|v| v.parse::<u64>().ok());
+        let throttling = matches!((self.throttle_count, count), (Some(a), Some(b)) if b > a);
+        self.throttle_count = count;
         let temps = hwmon::scan();
         let (model, threads) = self.cpu_model.clone().unwrap_or_default();
         let cpu = Cpu {
@@ -121,6 +130,7 @@ impl Collector {
             usage,
             temp: temps.cpu.map(|r| r.temp),
             mhz: self.mhz,
+            throttling,
             history: self.cpu_hist.iter().copied().collect(),
         };
 

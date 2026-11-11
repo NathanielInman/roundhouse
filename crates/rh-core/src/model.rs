@@ -62,6 +62,10 @@ pub struct Cpu {
     #[serde(default)]
     pub temp_limit: Option<f32>,
     pub mhz: Option<f32>,
+    /// The CPU reported thermal throttling since the last sample (Intel's
+    /// `thermal_throttle` counters; AMD reports none).
+    #[serde(default)]
+    pub throttling: bool,
     /// Recent usage, oldest first.
     pub history: Vec<f32>,
 }
@@ -121,6 +125,9 @@ pub struct Gpu {
     pub vram_used: Option<u64>,
     pub vram_total: Option<u64>,
     pub power_w: Option<f32>,
+    /// The card says it is slowing down for heat right now (NVML).
+    #[serde(default)]
+    pub throttling: bool,
     pub history: Vec<f32>,
 }
 
@@ -234,6 +241,9 @@ pub struct Reason {
     pub text: String,
     /// The drawer tab that explains it.
     pub tab: String,
+    /// Which rule raised it (`cpu.temp`, `fs:/data`), stable across samples.
+    #[serde(default)]
+    pub key: String,
 }
 
 /// The bar lamp: the most urgent level and every reason behind it.

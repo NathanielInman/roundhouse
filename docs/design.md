@@ -134,6 +134,26 @@ the drawer shows reasons as links to that tab.
 
 Read-only filesystems, stale shares and automount points never count.
 
+A part that reports thermal throttling raises act at once: Intel's
+`package_throttle_count` rising between samples, or NVML's thermal slowdown
+reasons on an NVIDIA card.
+
+### Envelope
+
+`evaluate` is pure and judges one snapshot. The daemon runs its result
+through `LampState`, which gives the light an envelope so it does not
+chatter:
+
+| Stage | Rule |
+|---|---|
+| Hysteresis | A level holds until its value falls a margin under the line that raised it: 3°C for temperatures, one point of disk use, two points of pressure, one point of free memory. |
+| Attack | A temperature must stay past its heads-up line for `attack` seconds (10) before the lamp rises, and at its limit for `sustain` seconds (30) before it says act. CPUs boost until they reach their limit, so touching it is normal; sitting there is throttling. Disk use, PSI and throttle reports are already averaged or explicit and rise at once. |
+| Release | A condition must stay clear for `release` seconds (30) before the lamp falls, one level at a time. |
+
+Each reason carries a `key` naming its rule (`cpu.temp`, `fs:/data`,
+`drive:nvme0n1`, `gpu:RTX 3080`, `mem.pressure`), stable across samples.
+`rh status` without a daemon has no history and shows the bare rules.
+
 ### Temperature limits
 
 A safe temperature depends on the part: a Ryzen 9000 boosts until 95°C by
@@ -229,7 +249,8 @@ What Switchyard uses from Roundhouse:
 | `{"cmd":"hide"}` on `rh.sock` | Sent when the board opens, so the drawer closes. |
 | `{"cmd":"show","anchor":{...}}` on `rh.sock` | The board's Roundhouse link, whose dot is `lamp.level`. |
 
-The `lamp` shape (`level`, and `reasons` with `level`, `text` and `tab`) is
+The `lamp` shape (`level`, and `reasons` with `level`, `text`, `tab` and
+`key`) is
 part of the sibling contract: change it only by adding fields.
 
 ## Protocol

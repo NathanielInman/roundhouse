@@ -217,6 +217,7 @@ fn sampler(shared: Shared) {
     let mut mtime = config_mtime();
     let mut sibling = None;
     let mut sibling_at: Option<Instant> = None;
+    let mut lamp = rh_core::lamp::LampState::new();
     loop {
         let (lock, cv) = &*shared;
         let (cfg, visible) = {
@@ -244,7 +245,7 @@ fn sampler(shared: Shared) {
             sibling_at = Some(Instant::now());
         }
         snap.siblings.switchyard = sibling.clone();
-        snap.lamp = rh_core::lamp::evaluate(&snap, &cfg.lamp);
+        snap.lamp = lamp.update(&snap, &cfg.lamp);
 
         let mut st = lock.lock().unwrap();
         snap.config_error = st.cfg_error.clone();

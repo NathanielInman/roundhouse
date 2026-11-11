@@ -115,6 +115,14 @@ pub struct LampConfig {
     pub mem_pressure_act: f32,
     /// Available memory under this percentage of total is a problem.
     pub mem_free_act: f32,
+    /// Seconds a temperature must stay past its heads-up line before the
+    /// lamp rises, so a spike does not change the light.
+    pub attack: f32,
+    /// Seconds a part must sit at its limit before the lamp says act. Modern
+    /// CPUs boost until they reach their limit, so touching it is normal.
+    pub sustain: f32,
+    /// Seconds a condition must stay clear before the lamp falls.
+    pub release: f32,
 }
 
 impl Default for LampConfig {
@@ -131,6 +139,9 @@ impl Default for LampConfig {
             mem_pressure_warn: 10.0,
             mem_pressure_act: 10.0,
             mem_free_act: 5.0,
+            attack: 10.0,
+            sustain: 30.0,
+            release: 30.0,
         }
     }
 }

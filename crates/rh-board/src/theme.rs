@@ -170,6 +170,9 @@ mod tests {
         );
         let c = css(Some(&t), &Config::default());
         assert!(c.contains("@define-color rh_panel rgba(40, 42, 46, 0.970);"));
-        assert!(!c.contains(", 0.000)"), "no tile may inherit the bar's zero alpha: {c}");
+        assert!(
+            !c.contains(", 0.000)"),
+            "no tile may inherit the bar's zero alpha: {c}"
+        );
     }
 }

@@ -121,6 +121,7 @@ mod tests {
             level: Level::Act,
             text: "/ is 96% full & <rising>".into(),
             tab: "storage".into(),
+            key: "fs:/".into(),
         });
         let cfg = Config::default();
         let l = line(&s, &cfg);
