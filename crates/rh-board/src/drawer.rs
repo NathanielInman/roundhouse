@@ -56,6 +56,8 @@ struct MachinePage {
     tiles: Vec<Spring>,
     apps: Rows,
     apps_card: gtk::Box,
+    net_apps: Rows,
+    net_apps_card: gtk::Box,
     audio: Rows,
     audio_card: gtk::Box,
 }
@@ -68,6 +70,8 @@ struct StoragePage {
 struct PortsPage {
     root: gtk::Box,
     rows: Rows,
+    /// Each app's connections off this machine.
+    talking: Rows,
 }
 
 struct NetworkPage {
@@ -192,6 +196,78 @@ fn port_rows(ports: &[rh_core::model::Port]) -> Vec<RowData> {
                 right_class: class,
                 ..Default::default()
             }
+        })
+        .collect()
+}
+
+/// The rate an app moves, both ways.
+fn both_ways(down: f64, up: f64, units: &str) -> String {
+    let rate = |b: f64| rh_core::collect::net::rate_in(b, units);
+    format!("↓ {} ↑ {}", rate(down), rate(up))
+}
+
+/// Apps moving data right now, busiest first, each with its share of the
+/// traffic. When the interfaces carried much more than the apps' TCP
+/// connections account for, a last row says so: that is UDP (QUIC) or
+/// connections that came and went between samples.
+fn net_app_rows(s: &Snapshot, units: &str) -> Vec<RowData> {
+    let busy: Vec<&rh_core::model::NetApp> = s
+        .net_apps
+        .iter()
+        .filter(|a| a.down + a.up >= 1000.0)
+        .take(5)
+        .collect();
+    let n = &s.machine.network;
+    let counted: f64 = s.net_apps.iter().map(|a| a.down + a.up).sum();
+    let wire = n.down + n.up;
+    let total = wire.max(counted).max(1.0);
+    let mut rows: Vec<RowData> = busy
+        .iter()
+        .map(|a| RowData {
+            name: a.name.clone(),
+            detail: a.peers_text(1),
+            right: both_ways(a.down, a.up, units),
+            meter: Some((a.down + a.up) / total),
+            ..Default::default()
+        })
+        .collect();
+    let missing = wire - counted;
+    if missing > 100_000.0 && missing > wire * 0.25 {
+        rows.push(RowData {
+            name: "Not counted".into(),
+            detail: "UDP and QUIC, or connections that closed".into(),
+            right: both_ways(
+                (n.down - s.net_apps.iter().map(|a| a.down).sum::<f64>()).max(0.0),
+                (n.up - s.net_apps.iter().map(|a| a.up).sum::<f64>()).max(0.0),
+                units,
+            ),
+            meter: Some(missing / total),
+            meter_class: "calm",
+            ..Default::default()
+        });
+    }
+    rows
+}
+
+/// Every app with connections off this machine and who it talks to: its
+/// traffic while it moves data, else how many connections it holds.
+fn talking_rows(apps: &[rh_core::model::NetApp], units: &str) -> Vec<RowData> {
+    if apps.is_empty() {
+        return vec![RowData {
+            name: "No connections off this machine".into(),
+            ..Default::default()
+        }];
+    }
+    apps.iter()
+        .map(|a| RowData {
+            name: a.name.clone(),
+            detail: a.peers_text(2),
+            right: if a.down + a.up >= 1000.0 {
+                both_ways(a.down, a.up, units)
+            } else {
+                a.counts()
+            },
+            ..Default::default()
         })
         .collect()
 }
@@ -524,6 +600,10 @@ impl Drawer {
         let apps_card = card("MEMORY BY APP", "NOT BY PID");
         let apps = Rows::new();
         apps_card.append(&apps.root);
+        let net_apps_card = card("NETWORK BY APP", "TCP");
+        let net_apps = Rows::new();
+        net_apps_card.append(&net_apps.root);
+        net_apps_card.set_visible(false);
         let fans = label("", &["fans", "num"]);
         fans.set_wrap(true);
         fans.set_visible(false);
@@ -537,6 +617,7 @@ impl Drawer {
         mroot.append(&grid);
         mroot.append(&fans);
         mroot.append(&audio_card);
+        mroot.append(&net_apps_card);
         mroot.append(&apps_card);
         let machine = MachinePage {
             root: mroot,
@@ -554,6 +635,8 @@ impl Drawer {
             tiles,
             apps,
             apps_card,
+            net_apps,
+            net_apps_card,
             audio,
             audio_card,
         };
@@ -602,11 +685,16 @@ impl Drawer {
         let porows = Rows::new();
         let pocard = card("LISTENING", "WHO CAN REACH IT");
         pocard.append(&porows.root);
+        let tarows = Rows::new();
+        let tacard = card("TALKING OUT", "BY APP");
+        tacard.append(&tarows.root);
         let poroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         poroot.append(&pocard);
+        poroot.append(&tacard);
         let ports = PortsPage {
             root: poroot,
             rows: porows,
+            talking: tarows,
         };
 
         let stack = gtk::Stack::new();
@@ -971,6 +1059,9 @@ impl Drawer {
         self.render_storage(s, &cfg);
         self.render_network(s, &cfg);
         self.ports.rows.set(&port_rows(&s.ports));
+        self.ports
+            .talking
+            .set(&talking_rows(&s.net_apps, &cfg.network.units));
         let n_tabs = self.tabs.iter().filter(|(_, b)| b.is_visible()).count();
         self.foot
             .set_label(&format!("1-{n_tabs} tabs · Esc close · {}", s.host.os));
@@ -1161,6 +1252,10 @@ impl Drawer {
             .collect();
         p.apps_card.set_visible(!rows.is_empty());
         p.apps.set(&rows);
+
+        let rows = net_app_rows(s, &cfg.network.units);
+        p.net_apps_card.set_visible(!rows.is_empty());
+        p.net_apps.set(&rows);
 
         let rows = audio_rows(&s.audio);
         p.audio_card.set_visible(!rows.is_empty());
