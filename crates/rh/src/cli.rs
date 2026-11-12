@@ -573,6 +573,22 @@ fn status(json: bool, show_ip: bool) -> Result<i32> {
             );
         }
     }
+    if !s.net_apps.is_empty() {
+        println!("talking out");
+        for a in s.net_apps.iter().take(8) {
+            let traffic = if a.down + a.up > 0.0 {
+                format!("↓ {} ↑ {}", rate(a.down), rate(a.up))
+            } else {
+                String::new()
+            };
+            println!(
+                "    {:<24}{traffic:<24}{}  {}",
+                a.name,
+                a.counts(),
+                a.peers_text(2)
+            );
+        }
+    }
     if !s.apps.is_empty() {
         println!("apps");
         for a in s.apps.iter().take(6) {
