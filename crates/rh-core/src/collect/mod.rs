@@ -7,6 +7,7 @@
 
 pub mod apps;
 pub mod audio;
+pub mod conns;
 pub mod gpu;
 pub mod hwmon;
 pub mod net;
@@ -66,6 +67,8 @@ pub struct Collector {
     apps: Vec<AppUsage>,
     ports: Vec<crate::model::Port>,
     ports_at: Option<Instant>,
+    conns: conns::Tracker,
+    net_apps: Vec<crate::model::NetApp>,
     /// When each recent sample was taken.
     times: VecDeque<f64>,
     /// Intel's package throttle count on the last sample.
@@ -98,6 +101,8 @@ impl Collector {
             apps: vec![],
             ports: vec![],
             ports_at: None,
+            conns: conns::Tracker::default(),
+            net_apps: vec![],
             throttle_count: None,
             pipewire: pipewire::Watcher::default(),
             path: path::Prober::default(),
@@ -207,10 +212,13 @@ impl Collector {
         }
         if deep {
             self.apps = apps::sample(8);
-            // Walking every process's sockets costs more than the rest of a
-            // sample, so ports refresh every few seconds.
+            // The socket list is cheap; walking every process's sockets to
+            // find their owners is not, so the tracker does that only every
+            // few seconds (sooner while a new connection is busy), and the
+            // ports share its answer.
+            self.net_apps = self.conns.sample();
             if self.ports_at.is_none_or(|t| t.elapsed() >= PORTS_EVERY) {
-                self.ports = ports::scan();
+                self.ports = ports::scan(self.conns.owners(PORTS_EVERY));
                 self.ports_at = Some(Instant::now());
             }
         }
@@ -245,6 +253,7 @@ impl Collector {
             apps: if deep { self.apps.clone() } else { vec![] },
             audio,
             ports: if deep { self.ports.clone() } else { vec![] },
+            net_apps: if deep { self.net_apps.clone() } else { vec![] },
             now,
             ..Default::default()
         }

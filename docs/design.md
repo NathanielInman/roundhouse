@@ -90,7 +90,8 @@ at once, so the drawer never opens on old data for long.
 | Public IP | a STUN binding request (RFC 5389) to each `network.stun` server over IPv4 from one socket, and to the first over IPv6, on a helper thread; the reply must carry our random transaction ID. Two servers seeing the same port means the NAT keeps one mapping per socket. Opt-in with `network.public_ip`. The drawer shows it only on the Network tab, as "hidden" until "Show public IP" is clicked, and hides it again after 15 s or when the drawer closes, so a screenshot or a shared screen does not give it away; `rh status` needs `--show-ip` (`--json` always carries it) | while open, at most once a minute |
 | Storage | `/proc/self/mountinfo` and `statvfs` | while open, else every 30 s |
 | Memory by app | `/proc/*/cgroup` and cgroup v2 files | while open only |
-| Ports | `/proc/net/{tcp,tcp6}` listeners and `/proc/net/{udp,udp6}` bound service sockets (below 32768, no peer); socket inodes matched to `/proc/*/fd` for the process, `/proc/<pid>/cwd` for its directory; exposure from the bound address (`0.0.0.0`/`::` every interface, loopback, or one address); IPv4 and IPv6 fold together | while open, every 5 s |
+| Network by app | netlink `NETLINK_SOCK_DIAG` dumps (what `ss` reads, no privilege needed): TCP connections with `tcp_info`, connected UDP sockets; socket inodes to processes through `/proc/*/fd`, every 5 s or within 1 s while a busy socket has no known owner | while open only |
+| Ports | `/proc/net/{tcp,tcp6}` listeners and `/proc/net/{udp,udp6}` bound service sockets (below 32768, no peer); socket inodes matched to `/proc/*/fd` for the process, `/proc/<pid>/cwd` for its directory; exposure from the bound address (`0.0.0.0`/`::` every interface, loopback, or one address); IPv4 and IPv6 fold together | while open, every 5 s, sharing the owner walk with network by app |
 | Audio streams | `/proc/asound/cards`, `card*/pcm*/sub*/status` and `hw_params` (running streams, rate, format, owner); `seq/clients` (MIDI devices) | every sample |
 | PipeWire | its native socket (`$XDG_RUNTIME_DIR/pipewire-0`), spoken directly: bind the profiler, read quantum, DSP load and xrun counts | on a helper thread while open or during a recording session |
 | Switchyard | its socket | every 2 s open, 15 s closed |
@@ -123,6 +124,35 @@ was due, not after the work finished.
   unreachable" (the server or the network is).
 - An `autofs` mount point with nothing mounted on it is listed as "on
   demand" and is never touched.
+
+### Network by app
+
+The kernel's socket diagnostics list every connection off this machine. A
+TCP connection's `tcp_info` counts the bytes the peer acknowledged and the
+bytes received, so the difference between two samples is its rate. A
+connection that is new since the last sample counts all its bytes, and
+samples more than 3 s apart (the drawer was closed) start the counts over
+rather than credit a connection's whole life to one second.
+
+Each socket's inode leads to the process holding it, and the process to its
+app the way memory by app names it, so Chrome is one line in both lists. A
+socket whose process is not ours to look at reads `system` (root) or
+`uid N`. Loopback connections are left out: two dev servers talking to each
+other are not network traffic.
+
+What it cannot see, and says so:
+
+- UDP sockets carry no byte counts. QUIC, much of a browser's traffic, shows
+  its peers on the Ports tab but no rate.
+- A connection that opens and closes between two samples.
+
+The Machine tab lists apps moving more than 1 kB/s. When the interfaces
+carried more than 100 kB/s, and more than a quarter of it, beyond what the
+apps account for, a "Not counted" row shows the difference, so the list
+never pretends to explain traffic it cannot see. The Ports tab's "Talking
+out" card lists every app with a connection and its busiest peers (up to
+eight each), by address: naming them would take DNS snooping or reverse
+lookups, and neither belongs in the sampling path.
 
 ### Memory by app
 

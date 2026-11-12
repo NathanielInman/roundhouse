@@ -130,6 +130,23 @@ pub fn classify(cgroup: &str) -> Group {
     Group::Process
 }
 
+/// The app a process belongs to, named the way memory by app names it, so
+/// the same app reads the same in every list.
+pub fn name_of(pid: u32) -> Option<String> {
+    let base = Path::new("/proc").join(pid.to_string());
+    let cg = read(base.join("cgroup"))?;
+    let named = cg
+        .lines()
+        .find_map(|l| l.strip_prefix("0::"))
+        .and_then(|path| match classify(path.trim()) {
+            Group::Cgroup { name, .. } => name,
+            Group::Process => None,
+        });
+    named
+        .or_else(|| read_trim(base.join("comm")))
+        .map(|n| title(&n))
+}
+
 /// Working set of a cgroup: `memory.current` minus inactive page cache, the
 /// number container runtimes use for the same question.
 fn cgroup_mem(path: &str) -> Option<(u64, Option<u64>)> {

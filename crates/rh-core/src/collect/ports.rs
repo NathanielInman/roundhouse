@@ -80,7 +80,7 @@ pub fn exposure(addr: IpAddr) -> &'static str {
 }
 
 /// Socket inode to the pid holding it, for the processes we may look into.
-fn owners(proc_root: &Path) -> HashMap<u64, u32> {
+pub(crate) fn owners(proc_root: &Path) -> HashMap<u64, u32> {
     let mut out = HashMap::new();
     let Ok(rd) = std::fs::read_dir(proc_root) else {
         return out;
@@ -109,8 +109,8 @@ fn owners(proc_root: &Path) -> HashMap<u64, u32> {
 /// Every listening TCP port and bound UDP service port (below the ephemeral
 /// range), with its process and directory where we can see them. One line
 /// per process and port: IPv4 and IPv6 sockets fold together, keeping the
-/// widest exposure.
-pub fn scan() -> Vec<Port> {
+/// widest exposure. `owners` maps socket inodes to pids.
+pub fn scan(owners: &HashMap<u64, u32>) -> Vec<Port> {
     let net = Path::new("/proc/net");
     let mut socks: Vec<(&str, Socket)> = vec![];
     for (proto, files, state) in [
@@ -128,7 +128,6 @@ pub fn scan() -> Vec<Port> {
             }
         }
     }
-    let owners = owners(Path::new("/proc"));
     let home = crate::paths::home().to_string_lossy().into_owned();
     let rank = |e: &str| match e {
         "all" => 2,

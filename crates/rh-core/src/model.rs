@@ -27,6 +27,10 @@ pub struct Snapshot {
     /// open.
     #[serde(default)]
     pub ports: Vec<Port>,
+    /// Network traffic and peers by app, busiest first. Filled while the
+    /// drawer is open.
+    #[serde(default)]
+    pub net_apps: Vec<NetApp>,
     /// Unix seconds when the sample was taken.
     pub now: f64,
 }
@@ -448,6 +452,80 @@ pub struct Port {
     pub process: Option<String>,
     /// The directory the process runs in: which repo started it.
     pub cwd: Option<String>,
+}
+
+/// One app's connections off this machine: its TCP traffic and who it talks
+/// to. Loopback connections are left out.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct NetApp {
+    /// The app, named as memory by app names it; `system` or `uid N` for a
+    /// process that is not ours to look at.
+    pub name: String,
+    /// Bytes per second over its TCP connections. UDP (QUIC) carries no
+    /// byte counts, so it is not in here.
+    pub down: f64,
+    pub up: f64,
+    /// Open TCP connections and connected UDP sockets.
+    pub tcp: usize,
+    pub udp: usize,
+    /// Who it talks to, busiest first, at most eight.
+    pub peers: Vec<Peer>,
+    /// How many peers it talks to, counting those left out of `peers`.
+    #[serde(default)]
+    pub peer_count: usize,
+}
+
+impl NetApp {
+    /// "12 TCP · 3 UDP".
+    pub fn counts(&self) -> String {
+        match (self.tcp, self.udp) {
+            (t, 0) => format!("{t} TCP"),
+            (0, u) => format!("{u} UDP"),
+            (t, u) => format!("{t} TCP · {u} UDP"),
+        }
+    }
+
+    /// The first `n` peers, then how many more: "192.0.2.1:443, [2001:db8::1]:443 +4".
+    pub fn peers_text(&self, n: usize) -> String {
+        let mut s = self
+            .peers
+            .iter()
+            .take(n)
+            .map(Peer::endpoint)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let more = self.peer_count.max(self.peers.len()).saturating_sub(n);
+        if more > 0 {
+            s.push_str(&format!(" +{more}"));
+        }
+        s
+    }
+}
+
+/// One remote address and port an app talks to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Peer {
+    /// `tcp` or `udp`.
+    pub proto: String,
+    pub addr: String,
+    pub port: u16,
+    /// Connections to it.
+    pub conns: usize,
+    /// Bytes per second (TCP only).
+    pub down: f64,
+    pub up: f64,
+}
+
+impl Peer {
+    /// `192.0.2.1:443`, `[2001:db8::1]:443`, with `/udp` for UDP.
+    pub fn endpoint(&self) -> String {
+        let udp = if self.proto == "udp" { "/udp" } else { "" };
+        if self.addr.contains(':') {
+            format!("[{}]:{}{udp}", self.addr, self.port)
+        } else {
+            format!("{}:{}{udp}", self.addr, self.port)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
