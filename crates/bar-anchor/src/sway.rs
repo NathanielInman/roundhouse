@@ -21,6 +21,7 @@ pub const GET_WORKSPACES: u32 = 1;
 /// `GET_OUTPUTS` in sway-ipc(7).
 pub const GET_OUTPUTS: u32 = 3;
 
+#[cfg(unix)]
 const MAGIC: &[u8; 6] = b"i3-ipc";
 
 pub fn socket() -> Option<PathBuf> {
