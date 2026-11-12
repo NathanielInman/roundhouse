@@ -127,6 +127,7 @@ window.roundhouse * { font-family: inherit; }
 .row .right.calm { color: @rh_calm; }
 .row .right.heads-up { color: @rh_heads_up; }
 .row .right.act { color: @rh_act; }
+.row.dim { opacity: 0.4; transition: opacity 400ms ease; }
 
 progressbar.meter > trough {
   min-height: 4px;
@@ -157,6 +158,7 @@ progressbar.meter.act > trough > progress { background: @rh_act; }
 
 .foot { color: @rh_dim; font-size: 10.5px; }
 .fans { color: @rh_dim; font-size: 10.5px; letter-spacing: 0.04em; padding: 0 2px; }
+.talkers { color: @rh_dim; font-size: 10.5px; margin-top: 2px; }
 
 /* A recording session: heavy builds wait. Accent, not alarm. */
 .yard-line.session {

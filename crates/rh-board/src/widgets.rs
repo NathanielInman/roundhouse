@@ -161,6 +161,8 @@ pub struct RowData {
     pub meter_class: &'static str,
     /// A group heading (a disk above its filesystems).
     pub head: bool,
+    /// Faded: something that just went away and is about to leave the list.
+    pub dim: bool,
 }
 
 pub struct Row {
@@ -218,6 +220,11 @@ impl Row {
             self.root.add_css_class("head");
         } else {
             self.root.remove_css_class("head");
+        }
+        if d.dim {
+            self.root.add_css_class("dim");
+        } else {
+            self.root.remove_css_class("dim");
         }
         match d.meter {
             Some(f) => {
