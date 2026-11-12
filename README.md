@@ -1,7 +1,7 @@
 <h1 align="center">Roundhouse</h1>
 
 <p align="center">
-  <img src="docs/assets/hero.svg" width="100%" alt="A waybar with one green lamp dot. A click on it opens the Roundhouse drawer out of the dot: a line saying Switchyard is building storefront, CPU and GPU tiles with temperatures against their limits, memory, pressure, network and memory by app, then the Storage tab with disks and a network share. The tab row ends with a link to the Switchyard board.">
+  <img src="docs/assets/hero.svg" width="100%" alt="A floating waybar of frosted pills: workspaces, the T3 Code window title, a song playing, five lamps with Roundhouse's green dot first and Switchyard's amber puzzle piece beside it, volume, the desk pill and the clock. A click on the green dot springs the Roundhouse drawer out of it: FROSTYARCH, calm, tabs for Machine, Storage, Network and Ports, and a Switchyard link dotted with what it is doing. The Machine tab says Switchyard is building storefront, then CPU, GPU, memory and pressure tiles with temperatures against their limits, and the network tile names the busiest apps. A scroll brings up the fans, the audio card and memory by app. The Network tab shows the way out hop by hop with the public IP hidden, the link, and every app talking out; npm finishes and stays a moment as a dimmed shadow marked closed. The Storage tab fills a meter for each disk and the network share, and a click outside closes the drawer.">
 </p>
 
 <p align="center">
