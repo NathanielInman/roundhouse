@@ -575,7 +575,7 @@ fn status(json: bool, show_ip: bool) -> Result<i32> {
     }
     if !s.net_apps.is_empty() {
         println!("talking out");
-        for a in s.net_apps.iter().take(8) {
+        for a in s.net_apps.iter().filter(|a| !a.gone).take(8) {
             let traffic = if a.down + a.up > 0.0 {
                 format!("↓ {} ↑ {}", rate(a.down), rate(a.up))
             } else {
