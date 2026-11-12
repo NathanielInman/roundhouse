@@ -237,7 +237,8 @@ samples every second and adds memory and network by app.
    matches the installed one.
 2. **Timeline:** what happened while I was away? OOM kills, thermal spikes,
    shares dropping and updates, folded into episodes the way Switchyard's
-   History is.
+   History is. Dragging across its graph zooms in and filters the episodes
+   to that stretch.
 3. **Dev:** repos with unpushed work; containers.
 4. **Script widgets:** any waybar custom-module script as a widget, unchanged.
 5. **macOS and Windows** through a tray app, as Switchyard does.
