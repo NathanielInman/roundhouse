@@ -5,8 +5,8 @@ for whatever you change.
 
 ## Crates
 
-- `bar-anchor`: Hyprland anchoring and panel placement, no GTK. Its `Anchor`
-  JSON must stay identical to Switchyard's.
+- `bar-anchor`: anchoring (Hyprland, sway, niri) and panel placement, no
+  GTK. Its `Anchor` JSON must stay identical to Switchyard's.
 - `rh-core`: collectors (`collect/`), the snapshot model, lamp rules, config,
   the socket protocol, the waybar reader and the Switchyard client. No UI.
 - `rh`: the daemon, CLI and waybar module (one binary, `rh`).

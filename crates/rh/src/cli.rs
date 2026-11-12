@@ -137,7 +137,8 @@ fn ensure_daemon() -> Result<()> {
 fn open(toggle: bool, args: &[String]) -> Result<i32> {
     let (cfg, _) = Config::load();
     // Ask the compositor first: the cursor is still on the icon.
-    let anchor = bar_anchor::hypr::anchor(&cfg.bar.namespace, flag(args, "--center"));
+    let hint = rh_core::waybar::load_layout().unwrap_or_default().hint();
+    let anchor = bar_anchor::anchor(&cfg.bar.namespace, hint, flag(args, "--center"));
     let tab = value(args, "--tab");
     ensure_daemon()?;
     send(&if toggle {
@@ -775,13 +776,24 @@ fn doctor_setup() -> Result<i32> {
             "not running (`rh bar` or `rh toggle` starts it)"
         },
     );
-    match bar_anchor::hypr::socket() {
-        Some(_) => check(
+    match bar_anchor::compositor() {
+        Some("Hyprland") => check(
             Some(true),
-            "Hyprland IPC",
-            "the drawer opens from the clicked icon",
+            "compositor",
+            "Hyprland: the drawer opens from the clicked icon",
         ),
-        None => check(None, "Hyprland IPC", "not found; the drawer opens centered"),
+        Some(wm) => check(
+            Some(true),
+            "compositor",
+            &format!(
+                "{wm}: the drawer opens on the clicked bar, where waybar's config puts the module"
+            ),
+        ),
+        None => check(
+            None,
+            "compositor",
+            "not Hyprland, sway or niri; the drawer opens centered",
+        ),
     }
     match rh_core::waybar::config_path() {
         Some(p) => {

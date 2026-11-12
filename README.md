@@ -95,8 +95,10 @@ waits.
 
 ## Install
 
-Roundhouse is at 0.3. It runs on Linux with Wayland, and Hyprland gets the
-exact-icon anchoring.
+Roundhouse is at 0.3. It runs on Linux with Wayland. Under Hyprland the
+drawer opens at the icon you clicked; under sway and niri it opens on the
+monitor you clicked, at the end of the bar that holds the module (left,
+center or right in waybar's config).
 
 **Arch:** `packaging/aur/PKGBUILD` builds the package (`makepkg -si` in that
 directory). It installs `rh`, `rh-board` and a systemd user unit.

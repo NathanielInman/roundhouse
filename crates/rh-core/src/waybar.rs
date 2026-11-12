@@ -27,6 +27,28 @@ pub struct BarLayout {
     pub position: Option<String>,
     pub height: Option<u32>,
     pub layer: Option<String>,
+    /// Where the module that runs `rh bar` sits along the bar: 0 in
+    /// `modules-left`, 0.5 in `modules-center`, 1 in `modules-right`.
+    pub along: Option<f64>,
+}
+
+impl BarLayout {
+    /// What `bar_anchor` needs to open the drawer from this bar under a
+    /// compositor that cannot say where the cursor is (sway, niri).
+    pub fn hint(&self) -> bar_anchor::BarHint {
+        let edge = match self.position.as_deref() {
+            Some("bottom") => bar_anchor::Edge::Bottom,
+            Some("left") => bar_anchor::Edge::Left,
+            Some("right") => bar_anchor::Edge::Right,
+            // Waybar's default.
+            _ => bar_anchor::Edge::Top,
+        };
+        bar_anchor::BarHint {
+            edge: Some(edge),
+            size: self.height.map(f64::from),
+            along: self.along,
+        }
+    }
 }
 
 pub fn style_path() -> PathBuf {
@@ -238,10 +260,18 @@ pub fn parse_config(text: &str) -> BarLayout {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&strip_jsonc(text)) else {
         return BarLayout::default();
     };
-    // A config may hold one bar or a list of bars; the first one wins.
-    let bar = match &v {
-        serde_json::Value::Array(a) => a.first().cloned().unwrap_or_default(),
-        other => other.clone(),
+    // A config may hold one bar or a list of bars: the one with our module
+    // wins, else the first.
+    let bars = match v {
+        serde_json::Value::Array(a) => a,
+        other => vec![other],
+    };
+    let found = bars
+        .iter()
+        .find_map(|b| module_along(b).map(|along| (b, along)));
+    let (bar, along) = match found {
+        Some((b, along)) => (b.clone(), Some(along)),
+        None => (bars.first().cloned().unwrap_or_default(), None),
     };
     BarLayout {
         position: bar
@@ -250,7 +280,46 @@ pub fn parse_config(text: &str) -> BarLayout {
             .map(String::from),
         height: bar.get("height").and_then(|h| h.as_u64()).map(|h| h as u32),
         layer: bar.get("layer").and_then(|l| l.as_str()).map(String::from),
+        along,
     }
+}
+
+/// Where in `bar` the module that runs `rh bar` sits, by the list that
+/// names it (directly or inside a `group/`).
+fn module_along(bar: &serde_json::Value) -> Option<f64> {
+    [
+        ("modules-left", 0.0),
+        ("modules-center", 0.5),
+        ("modules-right", 1.0),
+    ]
+    .into_iter()
+    .find(|(list, _)| names_our_module(bar, bar.get(*list), 0))
+    .map(|(_, along)| along)
+}
+
+fn names_our_module(bar: &serde_json::Value, list: Option<&serde_json::Value>, depth: u8) -> bool {
+    let names = list.and_then(|l| l.as_array()).into_iter().flatten();
+    names.filter_map(|n| n.as_str()).any(|name| {
+        let Some(module) = bar.get(name) else {
+            return false;
+        };
+        runs_our_bar(module)
+            || (depth < 4
+                && name.starts_with("group/")
+                && names_our_module(bar, module.get("modules"), depth + 1))
+    })
+}
+
+/// The module's `exec` is `rh bar`, by any path.
+fn runs_our_bar(module: &serde_json::Value) -> bool {
+    let exec = module
+        .get("exec")
+        .and_then(|e| e.as_str())
+        .unwrap_or_default();
+    let mut words = exec.split_whitespace();
+    let program = words.next().unwrap_or_default();
+    let program = program.rsplit('/').next().unwrap_or_default();
+    program == "rh" && words.next() == Some("bar")
 }
 
 #[cfg(test)]
@@ -317,5 +386,37 @@ window#waybar.hidden { opacity: 0.2; }
     fn list_of_bars() {
         let l = parse_config(r#"[{"position":"left"},{"position":"top"}]"#);
         assert_eq!(l.position.as_deref(), Some("left"));
+        assert_eq!(l.along, None);
+    }
+
+    #[test]
+    fn finds_our_module_and_its_bar() {
+        let cfg = r#"[
+  {"position": "left", "modules-left": ["clock"], "clock": {}},
+  {
+    "position": "bottom",
+    "height": 26,
+    "modules-left": ["custom/other"],
+    "modules-right": ["cpu", "group/media"],
+    "group/media": {"modules": ["image#art", "custom/ours"]},
+    "custom/other": {"exec": "other bar"},
+    "custom/ours": {"exec": "~/.local/bin/rh bar", "return-type": "json"}
+  }
+]"#;
+        let l = parse_config(cfg);
+        assert_eq!(l.position.as_deref(), Some("bottom"));
+        assert_eq!(l.along, Some(1.0));
+        let h = l.hint();
+        assert_eq!(h.edge, Some(bar_anchor::Edge::Bottom));
+        assert_eq!(h.size, Some(26.0));
+        assert_eq!(h.along, Some(1.0));
+        let center = parse_config(
+            r#"{"modules-center": ["custom/x"], "custom/x": {"exec": "rh bar --verbose"}}"#,
+        );
+        assert_eq!(center.along, Some(0.5));
+        assert_eq!(center.hint().edge, Some(bar_anchor::Edge::Top));
+        let lookalike =
+            parse_config(r#"{"modules-left": ["custom/x"], "custom/x": {"exec": "notrh bar"}}"#);
+        assert_eq!(lookalike.along, None);
     }
 }

@@ -43,12 +43,12 @@ flowchart LR
   D <-- socket --> C["rh CLI"]
   D -. "sibling, optional" .-> Y["Switchyard daemon"]
   B -. "handoff, optional" .-> Y
-  C -. "anchor from" .-> H["Hyprland IPC"]
+  C -. "anchor from" .-> H["Hyprland, sway or niri IPC"]
 ```
 
 | Crate | Role |
 |---|---|
-| `bar-anchor` | Hyprland anchoring and panel placement. No GTK. Started as Switchyard's code and keeps its wire format, so the two can share it. |
+| `bar-anchor` | Anchoring (Hyprland, sway, niri) and panel placement. No GTK. Started as Switchyard's code and keeps its wire format, so the two can share it. |
 | `rh-core` | Collectors, the snapshot model, lamp rules, config, the socket protocol, the waybar reader and the Switchyard client. No UI. |
 | `rh` | The `rh` binary: daemon, CLI and waybar module. |
 | `rh-board` | The Linux drawer: GTK4 on `gtk4-layer-shell`, overlay layer, keyboard exclusive while open. |
@@ -218,11 +218,26 @@ its reserved edges, and the bar's layer surface (namespace `waybar` by
 default, `bar.namespace` in the config) to tell which edge the bar is on. The
 result is an `Anchor`, sent with the toggle request.
 
+Sway and niri do not tell a client where the cursor is, or where layer
+surfaces are, so there the anchor is coarser (`bar_anchor::anchor` picks the
+compositor from `HYPRLAND_INSTANCE_SIGNATURE`, `NIRI_SOCKET` or `SWAYSOCK`):
+
+- The monitor is the focused output. Moving onto a bar focuses its output
+  under sway's default `focus_follows_mouse yes`, and a click focuses it
+  under niri, before waybar runs `on-click`.
+- The edge is waybar's `position` (`top` when unset). Sway also reports the
+  space bars take from the visible workspace, so its edge and size come from
+  there when the config has none.
+- The click point is a stand-in: the middle of the bar's thickness, at the
+  start, middle or end of the bar for a module in `modules-left`,
+  `modules-center` or `modules-right` (`waybar::BarLayout::hint`, which
+  finds the bar whose module runs `rh bar`, inside a `group/` too).
+
 The drawer covers the monitor with a transparent layer surface and places
 the panel next to the bar's edge, centered on the click and clamped to the
 screen (`bar_anchor::place`). The open spring scales from the click point.
-Tiles follow with a stagger. Clicking outside the panel closes it. Without
-Hyprland, or with `--center`, the panel opens centered.
+Tiles follow with a stagger. Clicking outside the panel closes it. Under
+another compositor, or with `--center`, the panel opens centered.
 
 ## Theme
 
