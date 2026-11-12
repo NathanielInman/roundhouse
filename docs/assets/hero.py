@@ -509,6 +509,11 @@ def drawer(add, tab="machine", level="calm", yard="building", closed=False, fx=N
         page_storage(add, fx, f"{clip}-storage")
 
 
+# ---- end of the panel ----
+# dot-files' bar hero (docs/bar/apps.py) runs everything above this line
+# to draw the panel in its own tour, so keep the panel's code above it and
+# the story below it.
+
 # ---------------------------------------------------------------- the story
 
 CLICK_LAMP, OPEN = 1.0, 1.08
