@@ -258,6 +258,21 @@ const OWNERS_SOON: Duration = Duration::from_secs(1);
 const STALE: Duration = Duration::from_secs(3);
 /// Peers kept per app.
 const PEERS: usize = 8;
+/// The time constant of an app's smoothed rate, which orders the list so it
+/// does not reshuffle every second.
+const SMOOTH: f64 = 5.0;
+/// An app whose last connection closed stays this long as a shadow, so the
+/// list does not jump as short connections come and go.
+const LINGER: Duration = Duration::from_secs(10);
+
+/// An app seen recently.
+#[derive(Debug)]
+struct Seen {
+    name: String,
+    recent: f64,
+    /// How long since its last connection closed.
+    gone_for: Duration,
+}
 
 /// What one sample needs from the last: each socket's counters and who owns
 /// which socket.
@@ -268,6 +283,8 @@ pub struct Tracker {
     owners: HashMap<u64, u32>,
     owners_at: Option<Instant>,
     names: HashMap<u32, Option<String>>,
+    /// By lowercase name.
+    seen: HashMap<String, Seen>,
 }
 
 impl Tracker {
@@ -286,6 +303,7 @@ impl Tracker {
     pub fn sample(&mut self) -> Vec<NetApp> {
         let conns = scan();
         let now = Instant::now();
+        let gap = self.prev_at.map(|t| now - t);
         let rates = self.rates(&conns, now);
         // A busy socket nobody owns yet is a new connection: look sooner.
         let unknown = conns
@@ -294,7 +312,62 @@ impl Tracker {
             .any(|(c, r)| r.0 + r.1 > 0.0 && !self.owners.contains_key(&c.inode));
         self.owners(if unknown { OWNERS_SOON } else { OWNERS_EVERY });
         let names: Vec<String> = conns.iter().map(|c| self.name(c)).collect();
-        group(&conns, &rates, &names)
+        self.settle(group(&conns, &rates, &names), gap)
+    }
+
+    /// Smooths each app's rate, keeps apps whose connections all closed as
+    /// shadows for a while, and orders the list by the smoothed rate. `gap`
+    /// is the time since the last sample.
+    fn settle(&mut self, mut apps: Vec<NetApp>, gap: Option<Duration>) -> Vec<NetApp> {
+        let gap = gap.filter(|g| *g <= STALE);
+        if gap.is_none() {
+            self.seen.clear();
+        }
+        let step = gap.unwrap_or_default();
+        let alpha = 1.0 - (-step.as_secs_f64() / SMOOTH).exp();
+        for a in &mut apps {
+            let now = a.down + a.up;
+            let e = self
+                .seen
+                .entry(a.name.to_lowercase())
+                .or_insert_with(|| Seen {
+                    name: a.name.clone(),
+                    recent: now,
+                    gone_for: Duration::ZERO,
+                });
+            e.recent += alpha * (now - e.recent);
+            e.gone_for = Duration::ZERO;
+            a.recent = e.recent;
+        }
+        let here: std::collections::HashSet<String> =
+            apps.iter().map(|a| a.name.to_lowercase()).collect();
+        self.seen.retain(|key, e| {
+            if here.contains(key) {
+                return true;
+            }
+            e.gone_for += step;
+            e.recent *= 1.0 - alpha;
+            e.gone_for <= LINGER
+        });
+        for (key, e) in &self.seen {
+            if !here.contains(key) {
+                apps.push(NetApp {
+                    name: e.name.clone(),
+                    recent: e.recent,
+                    gone: true,
+                    ..Default::default()
+                });
+            }
+        }
+        apps.sort_by(|x, y| {
+            y.recent
+                .partial_cmp(&x.recent)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(x.gone.cmp(&y.gone))
+                .then((y.tcp + y.udp).cmp(&(x.tcp + x.udp)))
+                .then(x.name.cmp(&y.name))
+        });
+        apps
     }
 
     /// Bytes per second (down, up) for each connection since the last
@@ -479,6 +552,42 @@ mod tests {
         // After a long gap the counts start over.
         let r = t.rates(&a2, t0 + Duration::from_secs(60));
         assert_eq!(r, vec![(0.0, 0.0), (0.0, 0.0)]);
+    }
+
+    fn app(name: &str, down: f64) -> NetApp {
+        NetApp {
+            name: name.into(),
+            down,
+            tcp: 1,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn apps_linger_as_shadows_and_hold_their_place() {
+        let mut t = Tracker::default();
+        let s = Some(Duration::from_secs(1));
+        let out = t.settle(vec![app("Curl", 4000.0), app("Slack", 100.0)], None);
+        assert_eq!(out[0].recent, 4000.0);
+        // Curl goes quiet for a second: its smoothed rate still ranks first.
+        let out = t.settle(vec![app("Curl", 0.0), app("Slack", 200.0)], s);
+        assert_eq!(out[0].name, "Curl");
+        assert!(out[0].recent > 3000.0 && out[0].recent < 4000.0);
+        // Its connection closes: a shadow, still there.
+        let out = t.settle(vec![app("Slack", 200.0)], s);
+        let curl = out.iter().find(|a| a.name == "Curl").unwrap();
+        assert!(curl.gone && curl.tcp == 0 && curl.down == 0.0);
+        // Ten seconds on, it is gone.
+        let mut out = vec![];
+        for _ in 0..10 {
+            out = t.settle(vec![app("Slack", 200.0)], s);
+        }
+        assert_eq!(out.len(), 1);
+        // A long gap (the drawer was closed) forgets everything.
+        t.settle(vec![app("Curl", 1.0)], s);
+        let out = t.settle(vec![app("Slack", 5.0)], Some(Duration::from_secs(60)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].recent, 5.0);
     }
 
     #[test]

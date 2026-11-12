@@ -473,6 +473,14 @@ pub struct NetApp {
     /// How many peers it talks to, counting those left out of `peers`.
     #[serde(default)]
     pub peer_count: usize,
+    /// Bytes per second both ways, smoothed over a few seconds. The list is
+    /// ordered by it, so it does not reshuffle every second.
+    #[serde(default)]
+    pub recent: f64,
+    /// Its connections have all closed in the last ten seconds: a shadow,
+    /// kept so the list does not jump as short connections come and go.
+    #[serde(default)]
+    pub gone: bool,
 }
 
 impl NetApp {

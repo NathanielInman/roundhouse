@@ -146,13 +146,26 @@ What it cannot see, and says so:
   its peers on the Ports tab but no rate.
 - A connection that opens and closes between two samples.
 
-The Machine tab lists apps moving more than 1 kB/s. When the interfaces
-carried more than 100 kB/s, and more than a quarter of it, beyond what the
-apps account for, a "Not counted" row shows the difference, so the list
-never pretends to explain traffic it cannot see. The Ports tab's "Talking
-out" card lists every app with a connection and its busiest peers (up to
-eight each), by address: naming them would take DNS snooping or reverse
-lookups, and neither belongs in the sampling path.
+Apps come and go by the second, so the list is built to hold still:
+
+- Each app carries `recent`, its rate both ways smoothed with a 5 s time
+  constant, and the list is ordered by it, so a download that pauses for a
+  second keeps its place.
+- An app whose last connection closed stays for 10 s as a shadow (`gone`),
+  its smoothed rate decaying, before it leaves.
+
+The Machine tab keeps one line under the network tile for the three
+busiest apps by smoothed rate ("No app is moving data" otherwise), so the
+tab never changes height. The Network tab's Apps card, last on the tab so
+its length moves nothing below it, lists every app with a connection: its
+rate while it moves more than 1 kB/s, else its connections, and its
+busiest peers (up to eight kept), by address. Naming them would take DNS
+snooping or reverse lookups, and neither belongs in the sampling path.
+Shadows are dimmed and read "closed". The card shows eight apps and a
+"Show all" button for the rest. When the interfaces carried more than
+100 kB/s, and more than a quarter of it, beyond what the apps account for,
+a "Not counted" row shows the difference, so the list never pretends to
+explain traffic it cannot see.
 
 ### Memory by app
 
