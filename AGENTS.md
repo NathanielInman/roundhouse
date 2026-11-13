@@ -44,6 +44,10 @@ The machine you work on may run an installed Roundhouse. Point a dev build
 somewhere else with `ROUNDHOUSE_RUNTIME_DIR` and `ROUNDHOUSE_STATE_DIR` (and
 `ROUNDHOUSE_CONFIG_DIR` for a test config).
 
+Installing over `~/.local/bin/rh` upgrades the running daemon, drawer and
+bar modules on their own within a tick (docs/design.md, Upgrades);
+`rh restart` does it at once.
+
 ## Rules
 
 - No subprocesses in the daemon's sampling path. Read `/proc`, `/sys`, a

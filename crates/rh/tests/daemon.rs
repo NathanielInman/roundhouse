@@ -274,6 +274,53 @@ fn an_upgraded_daemon_retires_within_a_tick() {
     assert_eq!(event(&next_action(&mut board)), "quit");
 }
 
+/// The bar module follows an upgrade on its own: the old daemon retires,
+/// the bar re-executes itself in the same process, and the new bar starts
+/// the new daemon.
+#[test]
+fn the_bar_brings_up_the_new_daemon_after_an_upgrade() {
+    let mut d = Daemon::installed("bar-upgrade");
+    let mut bar = spawn(rh_at(&d.bin, &d.root).arg("bar"));
+    let exe = |pid: u32| std::fs::read_link(format!("/proc/{pid}/exe")).unwrap();
+    // Give the bar a moment to subscribe. It re-executes either way: it
+    // checks its binary before every connect too.
+    std::thread::sleep(Duration::from_millis(500));
+    install(&d.bin);
+    let status = exit_within(&mut d.child, Duration::from_secs(10)).expect("daemon kept running");
+    assert!(status.success());
+    let start = Instant::now();
+    let fresh = loop {
+        if let Ok(mut s) = UnixStream::connect(d.sock()) {
+            let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+            let _ = writeln!(s, r#"{{"cmd":"ping"}}"#);
+            let mut out = String::new();
+            if BufReader::new(s).read_line(&mut out).is_ok_and(|n| n > 0) {
+                break serde_json::from_str::<Value>(&out).unwrap();
+            }
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "the bar never started a new daemon"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    // Stop the new daemon (it runs in its own session) before asserting.
+    let _ = d.request(r#"{"cmd":"quit"}"#);
+    let bar_exe = exe(bar.id());
+    let _ = bar.kill();
+    let _ = bar.wait();
+    assert_eq!(fresh["ok"], true);
+    assert!(
+        fresh.get("stale").is_none(),
+        "the new daemon is stale: {fresh}"
+    );
+    assert!(
+        !bar_exe.to_string_lossy().ends_with("(deleted)"),
+        "the bar still runs the old binary: {}",
+        bar_exe.display()
+    );
+}
+
 #[test]
 fn a_second_daemon_leaves_the_first_alone() {
     let d = Daemon::start("twice");

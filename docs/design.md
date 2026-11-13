@@ -397,9 +397,22 @@ a new one), and Linux then shows a running copy's `/proc/self/exe` as
 - The daemon checks at the top of every sample, so within a tick of an
   install (5 seconds with the drawer closed) it sends the drawer `quit` and
   exits 0.
-- `ping` replies `stale: true` from a replaced daemon.
+- `ping` replies `stale: true` from a replaced daemon. Commands that talk to
+  the daemon (`toggle`, `show`, `hide`, `session`) ping first and swap a
+  stale daemon for the new one before they send, so the first click after
+  an install already reaches new code.
+- `rh bar` re-executes itself in the same process (waybar keeps its pipe)
+  when its stream ends and its own binary was replaced, and the new bar
+  starts the new daemon. A bar whose daemon is missing starts one at most
+  every 10 seconds.
 - The drawer exits on `quit`; the daemon starts the new one on the next
   click.
+
+`rh restart` does the same by hand: it sends `quit`, waits for that daemon's
+end of the socket to close, and starts a new one in its own session. A
+daemon from 0.3 does not know `quit` and has to be stopped once with
+`pkill -f 'rh daemon'`; its bar modules do not re-execute either, so restart
+waybar once too.
 
 ## Keyboard
 

@@ -100,6 +100,12 @@ install -Dm755 target/release/rh target/release/rh-board -t ~/.local/bin/
 rh doctor
 ```
 
+To upgrade, install the new binaries the same way. The daemon, the drawer
+and the bar module notice that their binary was replaced and switch to the
+new one within a few seconds; `rh restart` does it at once, and the drawer
+comes back on the next click. (Coming from 0.3, stop the old daemon once
+with `pkill -f 'rh daemon'` and restart waybar.)
+
 NVIDIA GPUs are read through NVML, which ships with the driver. Without it the
 GPU tile shows AMD cards or hides.
 

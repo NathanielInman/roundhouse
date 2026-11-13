@@ -23,6 +23,8 @@ Usage:
   rh history [--since 24h] [--json]   what the lamp said, and when
   rh doctor [--audio]                 check the setup (--audio: is it fit to record?)
   rh daemon                           run the daemon in the foreground
+  rh restart                          restart the daemon and the drawer (after an
+                                      upgrade they do it on their own)
   rh --version
 
 Tabs: machine, storage, network, ports.
@@ -56,10 +58,12 @@ pub fn run(args: &[String]) -> Result<i32> {
             Ok(0)
         }
         Some("daemon") => daemon(),
+        Some("restart") => restart(),
         Some("bar") => bar(),
         Some(cmd @ ("toggle" | "show")) => open(cmd == "toggle", rest),
         Some("hide") => {
             if rh_core::transport::daemon_alive() {
+                ensure_daemon()?;
                 send(&Request::Hide)?;
             }
             Ok(0)
@@ -94,41 +98,107 @@ fn send(req: &Request) -> Result<()> {
     }
 }
 
+/// Asks the daemon to quit and waits until that daemon is gone (its end of
+/// the socket closes). Another may already be starting: the bar module
+/// starts one as soon as its stream ends. False when the daemon refused (a
+/// daemon from before `quit` does not know it).
+fn stop_daemon() -> bool {
+    use std::io::{BufRead, BufReader};
+    let Ok(mut s) =
+        rh_core::transport::connect_to(&paths::socket_path(), Some(Duration::from_secs(2)))
+    else {
+        return true;
+    };
+    let line = serde_json::to_string(&Request::Quit).unwrap_or_default();
+    if writeln!(s, "{line}").is_err() {
+        return true;
+    }
+    let mut lines = BufReader::new(s).lines();
+    let ok = match lines.next() {
+        Some(Ok(reply)) => {
+            serde_json::from_str::<rh_core::protocol::Reply>(&reply).is_ok_and(|r| r.ok)
+        }
+        _ => true,
+    };
+    // The daemon exits right after its reply; wait for the close.
+    ok && lines.all(|l| l.is_ok())
+}
+
+fn restart() -> Result<i32> {
+    if rh_core::transport::daemon_alive() && !stop_daemon() {
+        return Err(anyhow!(
+            "the running daemon did not quit; stop it with `pkill -f 'rh daemon'`"
+        ));
+    }
+    start_daemon()?;
+    println!("rh: daemon restarted; the drawer starts on the next click");
+    Ok(0)
+}
+
 /// Starts the daemon in the background when it is not running, and waits
-/// for its socket.
+/// for its socket. A daemon whose binary an upgrade replaced is swapped for
+/// the new one first, so the command does not reach old code.
 fn ensure_daemon() -> Result<()> {
     if rh_core::transport::daemon_alive() {
-        return Ok(());
-    }
-    let exe = std::env::current_exe()?;
-    let log = paths::state_dir().join("daemon.log");
-    std::fs::create_dir_all(paths::state_dir())?;
-    let out = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log)?;
-    let mut cmd = std::process::Command::new(exe);
-    cmd.arg("daemon")
-        .stdin(std::process::Stdio::null())
-        .stdout(out.try_clone()?)
-        .stderr(out);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // Its own session, so closing the terminal or restarting the bar
-        // does not take the daemon with it.
-        unsafe {
-            cmd.pre_exec(|| {
-                libc::setsid();
-                Ok(())
-            });
+        let stale = rh_core::protocol::request_within(&Request::Ping, Duration::from_secs(1))
+            .is_ok_and(|r| r.stale);
+        if !stale || !stop_daemon() {
+            return Ok(());
         }
     }
-    cmd.spawn()?;
-    for _ in 0..40 {
+    start_daemon()
+}
+
+/// A daemon answers a ping. A bare connect is not enough: a daemon that is
+/// exiting can still accept for a moment.
+fn daemon_answers() -> bool {
+    rh_core::protocol::request_within(&Request::Ping, Duration::from_millis(500)).is_ok()
+}
+
+/// Starts a daemon in the background and waits until one answers.
+///
+/// A new daemon gives up when another holds the lock. That one may be
+/// starting (it answers soon), or it may be the one that just quit: its
+/// socket closes a moment before the kernel releases its lock. So a daemon
+/// that gave up while nobody answers is started again.
+fn start_daemon() -> Result<()> {
+    let exe = paths::exe().ok_or_else(|| anyhow!("cannot find the rh binary"))?;
+    let log = paths::daemon_log();
+    std::fs::create_dir_all(paths::state_dir())?;
+    let spawn = || -> Result<std::process::Child> {
+        let out = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)?;
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.arg("daemon")
+            .stdin(std::process::Stdio::null())
+            .stdout(out.try_clone()?)
+            .stderr(out);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // Its own session, so closing the terminal or restarting the bar
+            // does not take the daemon with it.
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::setsid();
+                    Ok(())
+                });
+            }
+        }
+        Ok(cmd.spawn()?)
+    };
+    let mut child = spawn()?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(50));
-        if rh_core::transport::daemon_alive() {
+        if daemon_answers() {
+            std::thread::spawn(move || child.wait());
             return Ok(());
+        }
+        if let Ok(Some(_)) = child.try_wait() {
+            child = spawn()?;
         }
     }
     Err(anyhow!("the daemon did not start; see {}", log.display()))
@@ -149,13 +219,34 @@ fn open(toggle: bool, args: &[String]) -> Result<i32> {
     Ok(0)
 }
 
+/// Runs the new `rh bar` in this process (same pid, same stdout to waybar)
+/// after an upgrade replaced the binary.
+#[cfg(unix)]
+fn reexec_bar() {
+    use std::os::unix::process::CommandExt;
+    if let Some(exe) = paths::exe() {
+        let err = std::process::Command::new(exe).arg("bar").exec();
+        eprintln!("rh: cannot restart the bar module: {err}");
+    }
+}
+
+#[cfg(not(unix))]
+fn reexec_bar() {}
+
 fn bar() -> Result<i32> {
     let (cfg, _) = Config::load();
     let offline = serde_json::to_string(&crate::bar::offline(&cfg))?;
     let mut out = std::io::stdout().lock();
     let mut last = String::new();
-    let mut tried_start = false;
+    // Starts the daemon when it is missing (first run, a crash, an
+    // upgrade), at most every 10 seconds.
+    let mut started: Option<std::time::Instant> = None;
     loop {
+        // An upgrade: the old daemon retired and ended the stream. Become the
+        // new bar, which starts the new daemon.
+        if paths::exe_replaced() {
+            reexec_bar();
+        }
         match rh_core::protocol::subscribe_raw(SubKind::Bar) {
             Ok(lines) => {
                 for line in lines {
@@ -166,9 +257,12 @@ fn bar() -> Result<i32> {
                         last = line;
                     }
                 }
+                if paths::exe_replaced() {
+                    continue;
+                }
             }
-            Err(_) if !tried_start => {
-                tried_start = true;
+            Err(_) if started.is_none_or(|t| t.elapsed() > Duration::from_secs(10)) => {
+                started = Some(std::time::Instant::now());
                 let _ = ensure_daemon();
                 continue;
             }
