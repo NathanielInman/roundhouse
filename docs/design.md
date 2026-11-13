@@ -21,8 +21,6 @@ The README is the tour; this is the spec.
    only the lamp's inputs while the drawer is hidden. It talks to the
    internet only when asked to (`network.public_ip`,
    `network.internet_check`).
-5. **Siblings, not dependencies.** Switchyard and Roundhouse each unlock
-   features in the other when both run, and neither needs the other.
 
 ## Non-goals
 
@@ -41,15 +39,13 @@ flowchart LR
   D <-- "local socket, JSON lines" --> B["rh-board (GTK4 layer-shell)"]
   D -- socket --> W["rh bar<br/>waybar module"]
   D <-- socket --> C["rh CLI"]
-  D -. "sibling, optional" .-> Y["Switchyard daemon"]
-  B -. "handoff, optional" .-> Y
   C -. "anchor from" .-> H["Hyprland, sway or niri IPC"]
 ```
 
 | Crate | Role |
 |---|---|
-| `bar-anchor` | Anchoring (Hyprland, sway, niri) and panel placement. No GTK. Started as Switchyard's code and keeps its wire format, so the two can share it. |
-| `rh-core` | Collectors, the snapshot model, lamp rules, config, the socket protocol, the waybar reader and the Switchyard client. No UI. |
+| `bar-anchor` | Anchoring (Hyprland, sway, niri) and panel placement. No GTK. |
+| `rh-core` | Collectors, the snapshot model, lamp rules, config, the socket protocol and the waybar reader. No UI. |
 | `rh` | The `rh` binary: daemon, CLI and waybar module. |
 | `rh-board` | The Linux drawer: GTK4 on `gtk4-layer-shell`, overlay layer, keyboard exclusive while open. |
 
@@ -94,7 +90,6 @@ at once, so the drawer never opens on old data for long.
 | Ports | `/proc/net/{tcp,tcp6}` listeners and `/proc/net/{udp,udp6}` bound service sockets (below 32768, no peer); socket inodes matched to `/proc/*/fd` for the process, `/proc/<pid>/cwd` for its directory; exposure from the bound address (`0.0.0.0`/`::` every interface, loopback, or one address); IPv4 and IPv6 fold together | while open, every 5 s, sharing the owner walk with network by app |
 | Audio streams | `/proc/asound/cards`, `card*/pcm*/sub*/status` and `hw_params` (running streams, rate, format, owner); `seq/clients` (MIDI devices) | every sample |
 | PipeWire | its native socket (`$XDG_RUNTIME_DIR/pipewire-0`), spoken directly: bind the profiler, read quantum, DSP load and xrun counts | on a helper thread while open or during a recording session |
-| Switchyard | its socket | every 2 s open, 15 s closed |
 
 Sparklines keep the last 60 samples, and `machine.times` says when each was
 taken. The drawer draws them against time over the last minute, so the
@@ -293,53 +288,6 @@ text, tile and border tokens. Layers, lowest first: built-in
 `style.css`, the bar-derived tokens, the user's `~/.config/roundhouse/style.css`.
 The drawer watches all three files and the config and restyles on change.
 
-## Siblings
-
-Switchyard and Roundhouse are separate products that know about each other.
-The rules:
-
-1. **Neither requires the other.** Every sibling feature is hidden when the
-   sibling is absent. No error, no log line, no delay longer than the
-   300 ms connect deadline.
-2. **Discovery is the socket.** A sibling is present when its socket exists
-   and answers. Switchyard's is `$SWITCHYARD_RUNTIME_DIR/yard.sock`, else
-   `$XDG_RUNTIME_DIR/switchyard/yard.sock`. Roundhouse's is
-   `$ROUNDHOUSE_RUNTIME_DIR/rh.sock`, else
-   `$XDG_RUNTIME_DIR/roundhouse/rh.sock`.
-3. **No shared crates on the wire.** Each side reads the other's JSON loosely
-   (unknown fields ignored, missing fields defaulted), so they can be
-   upgraded in any order. `bar-anchor` may be shared as a library, but the
-   `Anchor` JSON is the contract.
-4. **Handoff keeps the anchor.** When one opens the other, it sends the same
-   `Anchor` it opened with, so the second panel grows out of the same icon.
-5. **One panel at a time.** Whichever panel opens sends `{"cmd":"hide"}` to
-   the other, so clicking the other icon in the bar (or the other's link)
-   never leaves both open.
-6. **Links, not pages.** Each panel's tab row ends with a link to the other
-   (`● Switchyard ↗` here, `● Roundhouse ↗` on the board) while the other
-   runs. The dot carries the other's state; a click or the link's number key
-   closes this panel and opens the other with the same anchor. Tab and
-   Shift+Tab skip the link, so cycling never leaves the panel.
-
-What Roundhouse uses from Switchyard today:
-
-| Request | Used for |
-|---|---|
-| `{"cmd":"snapshot"}` | The link's dot: `aggregate.phase`, a CSS class on `.yard-dot` (blue while queued, waiting, building or running, green on ok, red on failed). The one-line status on the Machine tab and in the bar tooltip, while a heavy build runs or waits: `mainline.current`, `mainline.queue`, `aggregate.building`, `tasks[].id`, `tasks[].label`, and the queue head's `tasks[].phase` and `message` ("held: Roundhouse says ..."). |
-| `{"cmd":"show","anchor":{...}}` | The Switchyard link and the status line. `rh toggle --tab switchyard` asks for it directly while Switchyard runs. |
-
-What Switchyard uses from Roundhouse:
-
-| Request | Used for |
-|---|---|
-| `{"cmd":"snapshot"}` on `rh.sock` | `lamp.level`, `lamp.reasons[].level`/`text` and `lamp.hold`. While `hold` is set, Switchyard holds the next heavy build with it as the message and starts the build once it clears (`mainline.respect_roundhouse` in Switchyard's config). A Switchyard that predates `hold` holds on `act`. |
-| `{"cmd":"hide"}` on `rh.sock` | Sent when the board opens, so the drawer closes. |
-| `{"cmd":"show","anchor":{...}}` on `rh.sock` | The board's Roundhouse link, whose dot is `lamp.level`. |
-
-The `lamp` shape (`level`, `hold`, and `reasons` with `level`, `text`,
-`tab` and `key`) is
-part of the sibling contract: change it only by adding fields.
-
 ## Other machines
 
 `remote.listen` makes a daemon serve a read-only view of itself (host name,
@@ -357,14 +305,19 @@ thread every 5 s while the drawer is open or a host is not answering,
 and every 15 s otherwise. A host's
 first reason lights this lamp at its level, under its name ("rime:
 /mnt/tank is 96% full"), and a host that answered before and stopped is a
-heads-up. Remote reasons never hold builds. The Network tab lists the hosts.
+heads-up. The Network tab lists the hosts.
+
+Other machines' daemons and scripts reading `rh status --json` rely on the
+`lamp` shape (`level`, and `reasons` with `level`, `text`, `tab` and `key`),
+so it changes only by adding fields. `crates/rh-core/testdata/lamp-contract.json`
+pins it.
 
 ## History
 
 Each time what the lamp says changes (its level, which rules are lit at
-which level, the hold, the session) the daemon appends one JSON line to
+which level, the session) the daemon appends one JSON line to
 `$ROUNDHOUSE_STATE_DIR/history.jsonl`: time, level, reasons with their keys,
-hold and session. A reason whose number changes ("87°C" to "88°C") is not a
+and the session. A reason whose number changes ("87°C" to "88°C") is not a
 change, and a calm start after a restart is not an event. Past 1 MiB the file
 moves to `history.1.jsonl` and a new one starts. `rh history [--since 24h]
 [--json]` prints it; the Timeline tab will read it.
@@ -372,17 +325,11 @@ moves to `history.1.jsonl` and a new one starts. `rh history [--since 24h]
 ## Recording sessions
 
 `rh session on` starts a recording session and `rh session off` ends it (the
-drawer's session line ends it too). While one is on, `lamp.hold` is
-"a recording session is on", so Switchyard starts no heavy build, and the
-lamp keeps its color: a session is not an alarm. The session is kept in
-`$ROUNDHOUSE_STATE_DIR/session.json`, so it survives a daemon restart.
-
-`lamp.hold` is how Roundhouse tells a sibling that heavy work should wait.
-It is set by a session, or by the first `act` reason that more work would
-make worse (a filesystem, memory). Heat is never a hold: a build heats the
-CPU, and a part at its limit protects itself. Neither is the network. The field is always sent
-(`null` when clear), so a sibling can tell a calm answer from an older
-Roundhouse.
+drawer's session line ends it too). While one is on, audio dropouts and
+loud fans count toward the lamp (see its rules), PipeWire's profiler stays
+bound, and the lamp keeps its color: a session is not an alarm. The session
+is kept in `$ROUNDHOUSE_STATE_DIR/session.json`, so it survives a daemon
+restart.
 
 ### Audio
 
@@ -409,7 +356,7 @@ recording.
 ## Protocol
 
 Newline-delimited JSON on the socket, one request per line, one reply per
-request. Shapes follow Switchyard's.
+request.
 
 ```json
 {"cmd":"ping"}
@@ -438,7 +385,7 @@ holds the show until it subscribes.
 
 | Key | Action |
 |---|---|
-| <kbd>1</kbd>-<kbd>9</kbd> | Tab by position; the Switchyard link's number opens the board |
-| <kbd>Tab</kbd>, <kbd>→</kbd>, <kbd>l</kbd> | Next tab (skips the link) |
-| <kbd>Shift</kbd>+<kbd>Tab</kbd>, <kbd>←</kbd>, <kbd>h</kbd> | Previous tab (skips the link) |
+| <kbd>1</kbd>-<kbd>9</kbd> | Tab by position |
+| <kbd>Tab</kbd>, <kbd>→</kbd>, <kbd>l</kbd> | Next tab |
+| <kbd>Shift</kbd>+<kbd>Tab</kbd>, <kbd>←</kbd>, <kbd>h</kbd> | Previous tab |
 | <kbd>Esc</kbd> | Close |
