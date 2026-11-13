@@ -15,7 +15,6 @@
 @define-color rh_calm #a3be8c;
 @define-color rh_heads_up #ebcb8b;
 @define-color rh_act #bf616a;
-@define-color rh_idle #555b64;
 
 window.roundhouse {
   background: transparent;
@@ -71,13 +70,6 @@ window.roundhouse * { font-family: inherit; }
 }
 .tabs button:hover { color: @rh_fg; }
 .tabs button.active { background: @rh_accent; color: @rh_well; }
-/* The Switchyard tab is a link to the sibling's board, not a page. */
-.tabs button.link { font-weight: normal; }
-.tabs button.link .arrow { color: @rh_dim; }
-.yard-dot { color: @rh_idle; font-size: 9px; }
-.yard-dot.ok { color: @rh_calm; }
-.yard-dot.queued, .yard-dot.waiting, .yard-dot.building, .yard-dot.running { color: @rh_accent; }
-.yard-dot.failed { color: @rh_act; }
 
 /* ---- verdict ---- */
 .verdict {
@@ -145,7 +137,7 @@ progressbar.meter.calm > trough > progress { background: @rh_calm; }
 progressbar.meter.heads-up > trough > progress { background: @rh_heads_up; }
 progressbar.meter.act > trough > progress { background: @rh_act; }
 
-.yard-line {
+.line-button {
   background: @rh_tile;
   border: 1px solid @rh_tile_border;
   border-radius: 10px;
@@ -154,14 +146,14 @@ progressbar.meter.act > trough > progress { background: @rh_act; }
   box-shadow: none;
   font-weight: normal;
 }
-.yard-line:hover { background: @rh_tile_hover; color: @rh_accent; }
+.line-button:hover { background: @rh_tile_hover; color: @rh_accent; }
 
 .foot { color: @rh_dim; font-size: 10.5px; }
 .fans { color: @rh_dim; font-size: 10.5px; letter-spacing: 0.04em; padding: 0 2px; }
 .talkers { color: @rh_dim; font-size: 10.5px; margin-top: 2px; }
 
-/* A recording session: heavy builds wait. Accent, not alarm. */
-.yard-line.session {
+/* A recording session: accent, not alarm. */
+.line-button.session {
   border-color: alpha(@rh_accent, 0.45);
   background: alpha(@rh_accent, 0.08);
 }

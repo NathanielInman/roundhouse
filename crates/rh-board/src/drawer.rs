@@ -1,5 +1,4 @@
-//! The drawer: header with the lamp, tabs, and one page per tab. The
-//! Switchyard tab is a link: it hands the same anchor to Switchyard's board.
+//! The drawer: header with the lamp, tabs, and one page per tab.
 
 use crate::anim::{Motion, Spring};
 use crate::stage::Stage;
@@ -21,27 +20,16 @@ pub enum Msg {
     Restyle,
 }
 
-/// The tab that opens Switchyard's board instead of a page.
-const YARD: &str = "switchyard";
-
-/// Switchyard's aggregate phases, each a class on the link's dot.
-const YARD_PHASES: [&str; 7] = [
-    "idle", "queued", "waiting", "building", "running", "ok", "failed",
-];
-
-const TABS: [(&str, &str); 5] = [
+const TABS: [(&str, &str); 4] = [
     ("machine", "Machine"),
     ("storage", "Storage"),
     ("network", "Network"),
     ("ports", "Ports"),
-    ("switchyard", "Switchyard"),
 ];
 
 struct MachinePage {
     root: gtk::Box,
     verdict: gtk::Box,
-    /// What Switchyard's heavy work is doing, while it is doing something.
-    yard_line: gtk::Button,
     /// The recording session, while one is on; a click ends it.
     session_line: gtk::Button,
     reasons: gtk::Box,
@@ -94,7 +82,6 @@ pub struct Drawer {
     stage: Stage,
     spring: Spring,
     visible: Cell<bool>,
-    anchor: RefCell<Option<Anchor>>,
     snap: RefCell<Option<Snapshot>>,
     cfg: RefCell<Config>,
     lamp: gtk::Label,
@@ -109,8 +96,6 @@ pub struct Drawer {
     storage: StoragePage,
     network: NetworkPage,
     ports: PortsPage,
-    /// The dot on the Switchyard link, colored by Switchyard's phase.
-    yard_dot: gtk::Label,
     foot: gtk::Label,
     /// The public IP is showing.
     ip_shown: Cell<bool>,
@@ -533,7 +518,6 @@ impl Drawer {
         tabs_box.add_css_class("tabs");
         tabs_box.set_homogeneous(true);
         let mut tabs = vec![];
-        let yard_dot = label("\u{25cf}", &["yard-dot"]);
         let order: Vec<String> = cfg
             .drawer
             .tabs
@@ -547,20 +531,7 @@ impl Drawer {
                 .find(|(i, _)| i == id)
                 .map(|(_, t)| *t)
                 .unwrap_or(id);
-            let b = if id == YARD {
-                let row = gtk::Box::new(gtk::Orientation::Horizontal, 5);
-                row.set_halign(gtk::Align::Center);
-                row.append(&yard_dot);
-                row.append(&label(title, &[]));
-                row.append(&label("\u{2197}", &["arrow"]));
-                let b = gtk::Button::new();
-                b.set_child(Some(&row));
-                b.add_css_class("link");
-                b.set_tooltip_text(Some("Open the Switchyard board"));
-                b
-            } else {
-                gtk::Button::with_label(title)
-            };
+            let b = gtk::Button::with_label(title);
             b.set_focus_on_click(false);
             tabs_box.append(&b);
             tabs.push((id.clone(), b));
@@ -576,16 +547,8 @@ impl Drawer {
         let reasons = gtk::Box::new(gtk::Orientation::Vertical, 0);
         verdict.append(&reasons);
         verdict.set_visible(false);
-        let yard_line = gtk::Button::with_label("");
-        yard_line.add_css_class("yard-line");
-        if let Some(l) = yard_line.child().and_downcast::<gtk::Label>() {
-            l.set_xalign(0.0);
-            l.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        }
-        yard_line.set_tooltip_text(Some("Open the Switchyard board"));
-        yard_line.set_visible(false);
         let session_line = gtk::Button::with_label("");
-        session_line.add_css_class("yard-line");
+        session_line.add_css_class("line-button");
         session_line.add_css_class("session");
         if let Some(l) = session_line.child().and_downcast::<gtk::Label>() {
             l.set_xalign(0.0);
@@ -631,7 +594,6 @@ impl Drawer {
         let mroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         mroot.append(&verdict);
         mroot.append(&session_line);
-        mroot.append(&yard_line);
         mroot.append(&grid);
         mroot.append(&fans);
         mroot.append(&audio_card);
@@ -639,7 +601,6 @@ impl Drawer {
         let machine = MachinePage {
             root: mroot,
             verdict,
-            yard_line,
             session_line,
             reasons,
             reasons_sig: RefCell::new(String::new()),
@@ -676,7 +637,7 @@ impl Drawer {
         let pcard = card("WAY OUT", "");
         pcard.append(&prows.root);
         let ip_button = gtk::Button::with_label("Show public IP");
-        ip_button.add_css_class("yard-line");
+        ip_button.add_css_class("line-button");
         ip_button.set_tooltip_text(Some("Shows it for 15 seconds"));
         ip_button.set_visible(false);
         pcard.append(&ip_button);
@@ -690,7 +651,7 @@ impl Drawer {
         let acard = card("APPS", "TCP · BY APP");
         acard.append(&arows.root);
         let apps_more = gtk::Button::with_label("");
-        apps_more.add_css_class("yard-line");
+        apps_more.add_css_class("line-button");
         apps_more.set_visible(false);
         acard.append(&apps_more);
         let nroot = gtk::Box::new(gtk::Orientation::Vertical, 8);
@@ -758,18 +719,13 @@ impl Drawer {
         );
         window.set_child(Some(&stage));
 
-        let first = order
-            .iter()
-            .find(|t| *t != YARD)
-            .cloned()
-            .unwrap_or_else(|| "machine".into());
+        let first = order.first().cloned().unwrap_or_else(|| "machine".into());
         let d = Rc::new(Drawer {
             me: RefCell::new(std::rc::Weak::new()),
             window,
             stage,
             spring,
             visible: Cell::new(false),
-            anchor: RefCell::new(None),
             snap: RefCell::new(None),
             cfg: RefCell::new(cfg),
             lamp,
@@ -784,7 +740,6 @@ impl Drawer {
             storage,
             network,
             ports,
-            yard_dot,
             foot,
             ip_shown: Cell::new(false),
             apps_all: Cell::new(false),
@@ -831,14 +786,6 @@ impl Drawer {
         d.machine.session_line.connect_clicked(move |_| {
             send_quiet(Request::Session { on: Some(false) });
         });
-        {
-            let w = Rc::downgrade(&d);
-            d.machine.yard_line.connect_clicked(move |_| {
-                if let Some(d) = w.upgrade() {
-                    d.handoff();
-                }
-            });
-        }
         {
             let keys = gtk::EventControllerKey::new();
             let w = Rc::downgrade(&d);
@@ -903,9 +850,6 @@ impl Drawer {
             gdk::Key::ISO_Left_Tab | gdk::Key::Left | gdk::Key::h => -1,
             _ => return glib::Propagation::Proceed,
         };
-        // Cycling stays on this drawer's own pages; the link is a number
-        // key or a click away.
-        let visible: Vec<String> = visible.into_iter().filter(|t| t != YARD).collect();
         let cur = visible
             .iter()
             .position(|t| *t == *self.tab.borrow())
@@ -934,44 +878,17 @@ impl Drawer {
         if !self.tabs.iter().any(|(t, b)| t == id && b.is_visible()) {
             return;
         }
-        if id == YARD {
-            self.handoff();
-            return;
-        }
         *self.tab.borrow_mut() = id.to_string();
         self.select_quiet();
         self.render();
     }
 
-    /// Closes the drawer and opens Switchyard's board from the same anchor.
-    fn handoff(self: &Rc<Self>) {
-        let anchor = self.anchor.borrow().clone();
-        self.hide();
-        std::thread::spawn(move || {
-            rh_core::sibling::switchyard_show(anchor.as_ref());
-        });
-    }
-
     fn show(self: &Rc<Self>, anchor: Option<Anchor>, tab: Option<String>) {
-        // `--tab switchyard` goes straight to the board while it runs.
-        if tab.as_deref() == Some(YARD) {
-            let yard_on = self
-                .snap
-                .borrow()
-                .as_ref()
-                .is_some_and(|s| s.siblings.switchyard.is_some());
-            if yard_on {
-                *self.anchor.borrow_mut() = anchor;
-                self.handoff();
-                return;
-            }
-        }
         if let Some(name) = anchor.as_ref().and_then(|a| a.monitor.clone()) {
             if let Some(m) = find_monitor(&name) {
                 self.window.set_monitor(Some(&m));
             }
         }
-        *self.anchor.borrow_mut() = anchor.clone();
         self.stage.set_anchor(anchor);
         let was_visible = self.visible.replace(true);
         self.render();
@@ -991,10 +908,6 @@ impl Drawer {
                 }
             }
             send_quiet(Request::BoardVisible { visible: true });
-            // One panel at a time: opening the drawer closes Switchyard's board.
-            if self.cfg.borrow().siblings.switchyard {
-                std::thread::spawn(rh_core::sibling::switchyard_hide);
-            }
         }
     }
 
@@ -1071,23 +984,6 @@ impl Drawer {
             None => self.notice.set_visible(false),
         }
 
-        // The Switchyard link comes and goes with Switchyard, its dot
-        // colored by what Switchyard is doing.
-        let yard = s.siblings.switchyard.as_ref();
-        for (id, b) in &self.tabs {
-            if id == YARD {
-                b.set_visible(yard.is_some());
-            }
-        }
-        for c in YARD_PHASES {
-            self.yard_dot.remove_css_class(c);
-        }
-        if let Some(y) = yard {
-            if YARD_PHASES.contains(&y.phase.as_str()) {
-                self.yard_dot.add_css_class(&y.phase);
-            }
-        }
-
         self.render_machine(s, &cfg);
         self.render_storage(s, &cfg);
         self.render_network(s, &cfg);
@@ -1138,24 +1034,16 @@ impl Drawer {
         }
         p.verdict.set_visible(!s.lamp.reasons.is_empty());
 
-        // A recording session holds heavy builds; one click ends it.
+        // A recording session watches for dropouts and loud fans; one click
+        // ends it.
         p.session_line.set_visible(s.session.is_some());
         if let Some(x) = &s.session {
             let text = format!(
-                "\u{25cf} Recording session · {} · heavy builds wait",
+                "\u{25cf} Recording session · {} · watching for dropouts",
                 duration(s.now - x.since)
             );
             if p.session_line.label().as_deref() != Some(text.as_str()) {
                 p.session_line.set_label(&text);
-            }
-        }
-
-        // A heavy build explains a busy machine; one click opens the board.
-        let line = s.siblings.switchyard.as_ref().and_then(|y| y.status_line());
-        p.yard_line.set_visible(line.is_some());
-        if let Some(text) = line {
-            if p.yard_line.label().as_deref() != Some(text.as_str()) {
-                p.yard_line.set_label(&text);
             }
         }
 
