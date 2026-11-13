@@ -16,8 +16,8 @@ Usage:
   rh show [--tab NAME] [--center]     open the drawer
   rh hide                             close the drawer
   rh bar                              the waybar module (prints JSON lines)
-  rh session [on|off|toggle]          a recording session: Switchyard holds heavy
-                                      builds until it ends (no argument: show it)
+  rh session [on|off|toggle]          a recording session: audio dropouts and loud
+                                      fans light the lamp (no argument: show it)
   rh status [--json] [--show-ip]      print what the drawer shows (the public
                                       IP stays hidden without --show-ip)
   rh history [--since 24h] [--json]   what the lamp said, and when
@@ -25,7 +25,7 @@ Usage:
   rh daemon                           run the daemon in the foreground
   rh --version
 
-Tabs: machine, storage; switchyard opens Switchyard's board (while it runs).
+Tabs: machine, storage, network, ports.
 Config: ~/.config/roundhouse/config.toml
 ";
 
@@ -197,9 +197,6 @@ fn snapshot() -> (Snapshot, bool) {
     c.sample(true, &cfg);
     std::thread::sleep(Duration::from_millis(400));
     let mut s = c.sample(true, &cfg);
-    if cfg.siblings.switchyard {
-        s.siblings.switchyard = rh_core::sibling::switchyard();
-    }
     s.lamp = rh_core::lamp::evaluate(&s, &cfg.lamp);
     s.config_error = err;
     (s, false)
@@ -230,11 +227,6 @@ fn history(since: &str, json: bool) -> Result<i32> {
             } else {
                 format!("{what} (recording session)")
             };
-        }
-        if let Some(h) = &e.hold {
-            if !e.session {
-                what.push_str(&format!(" (builds held: {h})"));
-            }
         }
         println!("{}  {:<9} {what}", rh_core::clock(e.t), e.level.as_str());
     }
@@ -599,16 +591,6 @@ fn status(json: bool, show_ip: bool) -> Result<i32> {
             println!("    {:<24}{:>8}{cap}  {}", a.name, human(a.mem), a.detail);
         }
     }
-    match &s.siblings.switchyard {
-        Some(y) => {
-            let mut line = format!("{} · {} tasks", y.phase, y.tasks);
-            if let Some(status) = y.status_line() {
-                line.push_str(&format!(" · {status}"));
-            }
-            println!("{:<12}{line}", "switchyard");
-        }
-        None => println!("{:<12}not running", "switchyard"),
-    }
     if let Some(e) = &s.config_error {
         println!("\nconfig: {e}");
     }
@@ -919,18 +901,6 @@ fn doctor_setup() -> Result<i32> {
                 check(Some(false), "remote", &e)
             }
         }
-    }
-    match rh_core::sibling::switchyard() {
-        Some(y) => check(
-            Some(true),
-            "Switchyard",
-            &format!("running, {} tasks; the drawer links to its board", y.tasks),
-        ),
-        None => check(
-            None,
-            "Switchyard",
-            "not running (optional; the drawer links to its board when it is)",
-        ),
     }
     Ok(if failed { 1 } else { 0 })
 }
