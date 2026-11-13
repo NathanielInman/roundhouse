@@ -546,7 +546,14 @@ fn sampler(shared: Shared) {
 }
 
 pub fn run() -> anyhow::Result<i32> {
-    let listener = Listener::bind()?;
+    let listener = match Listener::bind() {
+        Ok(l) => l,
+        Err(e) if e.is::<rh_core::transport::AlreadyRunning>() => {
+            eprintln!("rh: {e}");
+            return Ok(rh_core::transport::ALREADY_RUNNING);
+        }
+        Err(e) => return Err(e),
+    };
     listener.cleanup_on_signal();
     let (cfg, cfg_error) = Config::load();
     if let Some(e) = &cfg_error {

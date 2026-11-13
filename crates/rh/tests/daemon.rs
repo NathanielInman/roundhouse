@@ -325,7 +325,8 @@ fn the_bar_brings_up_the_new_daemon_after_an_upgrade() {
 fn a_second_daemon_leaves_the_first_alone() {
     let d = Daemon::start("twice");
     let status = rh(&d.root).arg("daemon").status().unwrap();
-    assert!(!status.success());
+    // 75 (EX_TEMPFAIL), which the systemd unit does not restart.
+    assert_eq!(status.code(), Some(75));
     assert!(d.sock().exists());
     assert_eq!(d.request(r#"{"cmd":"ping"}"#)["ok"], true);
 }

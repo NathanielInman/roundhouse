@@ -64,7 +64,12 @@ flowchart LR
 
 The runtime directory is mode 0700 and the socket 0600. The daemon holds
 `daemon.lock` (flock) while it runs, so two started at once (both bar modules
-after an upgrade) cannot both bind the socket: the second exits.
+after an upgrade) cannot both bind the socket: the second exits with status
+75, not 1. `packaging/systemd/roundhouse.service` uses `Restart=always`
+with `RestartPreventExitStatus=75` and `SuccessExitStatus=75`, so whichever
+daemon starts first (the unit, the bar, a click) is the one, and the unit
+neither loops nor reports a failure when it is not. It also brings the
+daemon back after an upgrade retires the old one.
 
 ## Sampling
 

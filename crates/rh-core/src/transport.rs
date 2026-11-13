@@ -49,6 +49,29 @@ pub fn daemon_alive() -> bool {
     connect().is_ok()
 }
 
+/// Another daemon holds the lock or the socket. Not a failure: `rh daemon`
+/// exits with [`ALREADY_RUNNING`] so a systemd unit does not keep restarting
+/// it.
+#[derive(Debug)]
+pub struct AlreadyRunning(pub std::path::PathBuf);
+
+impl std::fmt::Display for AlreadyRunning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "a Roundhouse daemon is already running ({})",
+            self.0.display()
+        )
+    }
+}
+
+impl std::error::Error for AlreadyRunning {}
+
+/// The exit status of a daemon that found another one running (EX_TEMPFAIL);
+/// `packaging/systemd/roundhouse.service` names it in
+/// `RestartPreventExitStatus`.
+pub const ALREADY_RUNNING: i32 = 75;
+
 #[cfg(unix)]
 pub struct Listener {
     inner: std::os::unix::net::UnixListener,
@@ -76,10 +99,7 @@ impl Listener {
         // SAFETY: flock on a file descriptor we own.
         let locked = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
         if !locked || daemon_alive() {
-            return Err(anyhow!(
-                "a Roundhouse daemon is already running ({})",
-                path.display()
-            ));
+            return Err(AlreadyRunning(path).into());
         }
         let _ = std::fs::remove_file(&path);
         let inner = std::os::unix::net::UnixListener::bind(&path)

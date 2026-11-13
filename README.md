@@ -124,7 +124,10 @@ Use full paths: a waybar started by systemd usually does not have
 `~/.local/bin` on its `PATH`. `rh bar` starts the daemon the first time it
 runs, and the daemon starts the drawer the first time you click. To have
 systemd keep the daemon running instead, enable the user unit from the
-package or the release (`systemctl --user enable --now roundhouse`).
+package or the release (`systemctl --user enable --now roundhouse`). systemd
+restarts it after a crash, an upgrade or `rh restart`; if the bar starts a
+daemon first, the unit's own start finds it running and stops without an
+error.
 
 The module's class follows the lamp (`calm`, `heads-up`, `act`, `offline`), so
 the bar can color it:

@@ -6,8 +6,14 @@ After=graphical-session.target
 
 [Service]
 ExecStart=@BINDIR@/rh daemon
-Restart=on-failure
+# Back after a crash, and after an upgrade or `rh restart` retires the old
+# daemon (exit 0).
+Restart=always
 RestartSec=2
+# 75: another daemon (one the bar, a click or `rh restart` started) holds the
+# lock. One daemon is running, so stop trying, and do not call it a failure.
+RestartPreventExitStatus=75
+SuccessExitStatus=75
 
 [Install]
 WantedBy=graphical-session.target
