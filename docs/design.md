@@ -371,18 +371,35 @@ request.
 {"cmd":"subscribe","kind":"board"}
 {"cmd":"subscribe","kind":"bar"}
 {"cmd":"session","on":true}
+{"cmd":"quit"}
 ```
 
 Replies are `{"ok":true}` with optional `snapshot`, `version` or `error`.
 `session` without `on` toggles, and its reply carries the snapshot after the
-change.
+change. A `ping` reply carries `"stale":true` from a daemon whose binary an
+upgrade replaced. `quit` replies, tells the drawer to quit and exits.
 
 A `board` subscription receives `{"event":"snapshot","snapshot":{...}}` on
 every sample, plus `{"event":"show",...}`, `{"event":"toggle",...}` and
-`{"event":"hide"}`. A `bar` subscription receives waybar JSON lines, already
+`{"event":"hide"}`, and `{"event":"quit"}` when the daemon is going away
+for good. A `bar` subscription receives waybar JSON lines, already
 formatted, only when they change. When a toggle arrives and no drawer is
 subscribed, the daemon starts `rh-board` (next to `rh`, else on `PATH`) and
 holds the show until it subscribes.
+
+## Upgrades
+
+Installing a new `rh` replaces the file (`install` and `cargo install` write
+a new one), and Linux then shows a running copy's `/proc/self/exe` as
+`<path> (deleted)`. That is how each process knows it runs old code, and
+`rh_core::paths::exe` strips the suffix to find the new binary:
+
+- The daemon checks at the top of every sample, so within a tick of an
+  install (5 seconds with the drawer closed) it sends the drawer `quit` and
+  exits 0.
+- `ping` replies `stale: true` from a replaced daemon.
+- The drawer exits on `quit`; the daemon starts the new one on the next
+  click.
 
 ## Keyboard
 

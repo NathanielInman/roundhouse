@@ -95,9 +95,6 @@ fn recording(audio: &rh_core::model::Audio, cards: &[String]) -> bool {
         .any(|s| s.capture && (cards.is_empty() || cards.iter().any(|c| c == &s.card)))
 }
 
-/// A subscriber: the queue its writer thread drains.
-type Sub = SyncSender<Arc<str>>;
-
 /// Lines a subscriber may fall behind before it misses some.
 const QUEUE: usize = 8;
 
@@ -108,6 +105,21 @@ fn send_line(s: &mut Stream, line: &str) -> bool {
         .is_ok()
 }
 
+/// A subscriber: the queue its writer thread drains.
+struct Sub {
+    tx: SyncSender<Arc<str>>,
+    writer: std::thread::JoinHandle<()>,
+}
+
+impl Sub {
+    /// Waits until everything queued is written, or the socket gave up.
+    fn finish(self) {
+        let Sub { tx, writer } = self;
+        drop(tx);
+        let _ = writer.join();
+    }
+}
+
 /// Gives a subscribed stream its own writer thread. The thread ends, and the
 /// queue disconnects, when a write fails or times out.
 fn subscriber(mut stream: Stream, first: &[String]) -> Option<Sub> {
@@ -116,14 +128,14 @@ fn subscriber(mut stream: Stream, first: &[String]) -> Option<Sub> {
     for line in first {
         tx.try_send(line.as_str().into()).ok()?;
     }
-    std::thread::spawn(move || {
+    let writer = std::thread::spawn(move || {
         for line in rx {
             if !send_line(&mut stream, &line) {
                 return;
             }
         }
     });
-    Some(tx)
+    Some(Sub { tx, writer })
 }
 
 /// Queues a line for every subscriber without blocking, and drops the ones
@@ -131,8 +143,29 @@ fn subscriber(mut stream: Stream, first: &[String]) -> Option<Sub> {
 /// how many are still subscribed.
 fn broadcast(subs: &mut Vec<Sub>, line: &str) -> usize {
     let line: Arc<str> = line.into();
-    subs.retain(|s| !matches!(s.try_send(line.clone()), Err(TrySendError::Disconnected(_))));
+    subs.retain(|s| {
+        !matches!(
+            s.tx.try_send(line.clone()),
+            Err(TrySendError::Disconnected(_))
+        )
+    });
     subs.len()
+}
+
+/// Tells the drawer to quit and exits: `rh restart`, or an upgrade replaced
+/// this binary. Bars see their stream end; a replaced bar restarts itself,
+/// and the new one starts the new daemon. The drawer starts again on the
+/// next click.
+fn retire(st: &mut State) -> ! {
+    let quit: Arc<str> = event_line(&Event::Quit).into();
+    for b in std::mem::take(&mut st.boards) {
+        // Waits for room rather than skipping: the drawer must hear this.
+        // The writer's timeout bounds the wait.
+        let _ = b.tx.send(quit.clone());
+        b.finish();
+    }
+    eprintln!("rh: exiting");
+    std::process::exit(0)
 }
 
 fn event_line(e: &Event) -> String {
@@ -260,8 +293,16 @@ fn handle(shared: Shared, stream: Stream) {
         let reply = match req {
             Request::Ping => Reply {
                 version: Some(env!("CARGO_PKG_VERSION").into()),
+                stale: rh_core::paths::exe_replaced(),
                 ..Reply::ok()
             },
+            Request::Quit => {
+                let _ = send_line(
+                    &mut writer,
+                    &serde_json::to_string(&Reply::ok()).unwrap_or_default(),
+                );
+                retire(&mut lock.lock().unwrap());
+            }
             Request::Snapshot => {
                 let st = lock.lock().unwrap();
                 Reply {
@@ -437,6 +478,11 @@ fn sampler(shared: Shared) {
     loop {
         let (cfg, cfg_error, visible, watch, remotes) = {
             let mut st = lock.lock().unwrap();
+            // An upgrade that replaced this binary is noticed here, within a
+            // tick, and the old daemon retires instead of serving old code.
+            if rh_core::paths::exe_replaced() {
+                retire(&mut st);
+            }
             st.wake = false;
             let now_mtime = config_mtime();
             if now_mtime != mtime {

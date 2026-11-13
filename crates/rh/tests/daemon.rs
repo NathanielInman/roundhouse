@@ -1,6 +1,7 @@
 //! Drives a real `rh daemon` in a throwaway directory over its socket: the
 //! bar and drawer subscriptions, toggle and hide, the show held for a drawer
-//! that is still starting, recording sessions and a clean stop.
+//! that is still starting, recording sessions, a clean stop, and retiring
+//! when an upgrade replaces the binary.
 
 #![cfg(target_os = "linux")]
 
@@ -13,12 +14,18 @@ use std::time::{Duration, Instant};
 
 struct Daemon {
     root: PathBuf,
+    /// The `rh` this daemon runs.
+    bin: PathBuf,
     child: Child,
 }
 
 /// `rh` pointed at a throwaway directory.
 fn rh(root: &Path) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_rh"));
+    rh_at(Path::new(env!("CARGO_BIN_EXE_rh")), root)
+}
+
+fn rh_at(bin: &Path, root: &Path) -> Command {
+    let mut c = Command::new(bin);
     c.env("ROUNDHOUSE_RUNTIME_DIR", root.join("run"))
         .env("ROUNDHOUSE_STATE_DIR", root.join("state"))
         .env("ROUNDHOUSE_CONFIG_DIR", root.join("config"))
@@ -35,14 +42,30 @@ impl Daemon {
     }
 
     fn with_config(name: &str, config: &str) -> Daemon {
+        Daemon::launch(name, config, false)
+    }
+
+    /// A daemon running its own copy of `rh`, which a test may replace the
+    /// way an upgrade does.
+    fn installed(name: &str) -> Daemon {
+        Daemon::launch(name, "", true)
+    }
+
+    fn launch(name: &str, config: &str, copy: bool) -> Daemon {
         let root = std::env::temp_dir().join(format!("rh-e2e-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for d in ["run", "state", "config"] {
+        for d in ["run", "state", "config", "bin"] {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
         std::fs::write(root.join("config/config.toml"), config).unwrap();
-        let child = rh(&root).arg("daemon").spawn().unwrap();
-        let d = Daemon { root, child };
+        let bin = if copy {
+            install(&root.join("bin/rh"));
+            root.join("bin/rh")
+        } else {
+            PathBuf::from(env!("CARGO_BIN_EXE_rh"))
+        };
+        let child = spawn(rh_at(&bin, &root).arg("daemon"));
+        let d = Daemon { root, bin, child };
         let start = Instant::now();
         while !d.sock().exists() {
             assert!(
@@ -88,6 +111,43 @@ impl Drop for Daemon {
         let _ = self.child.wait();
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+/// Puts a fresh copy of the built `rh` at `to` the way `install` does: a new
+/// file renamed over the old one, so a process running the old one sees its
+/// binary as replaced.
+fn install(to: &Path) {
+    let tmp = to.with_extension("new");
+    std::fs::copy(env!("CARGO_BIN_EXE_rh"), &tmp).unwrap();
+    std::fs::rename(&tmp, to).unwrap();
+}
+
+/// Spawns, retrying while another test thread's fork still holds the
+/// freshly copied binary open for writing (ETXTBSY).
+fn spawn(cmd: &mut Command) -> Child {
+    let start = Instant::now();
+    loop {
+        match cmd.spawn() {
+            Ok(c) => return c,
+            Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) => {
+                assert!(start.elapsed() < Duration::from_secs(5), "{e}");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(e) => panic!("cannot start rh: {e}"),
+        }
+    }
+}
+
+/// Waits for a child to exit, for at most `limit`.
+fn exit_within(child: &mut Child, limit: Duration) -> Option<std::process::ExitStatus> {
+    let start = Instant::now();
+    while start.elapsed() < limit {
+        if let Some(s) = child.try_wait().unwrap() {
+            return Some(s);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    None
 }
 
 fn event(v: &Value) -> &str {
@@ -170,6 +230,48 @@ fn stopping_removes_the_socket() {
     unsafe { libc::kill(pid, libc::SIGTERM) };
     let _ = d.child.wait();
     assert!(!Path::new(&d.sock()).exists());
+}
+
+#[test]
+fn quit_tells_the_drawer_and_exits() {
+    let mut d = Daemon::start("quit");
+    let ping = d.request(r#"{"cmd":"ping"}"#);
+    assert!(ping.get("stale").is_none(), "a fresh daemon is not stale");
+    let mut board = d.subscribe("board");
+    assert_eq!(event(&board.next().unwrap()), "snapshot");
+    assert_eq!(d.request(r#"{"cmd":"quit"}"#)["ok"], true);
+    assert_eq!(event(&next_action(&mut board)), "quit");
+    let status = exit_within(&mut d.child, Duration::from_secs(5)).expect("daemon kept running");
+    assert!(status.success());
+}
+
+#[test]
+fn an_upgraded_daemon_retires_within_a_tick() {
+    let mut d = Daemon::installed("upgrade");
+    let mut board = d.subscribe("board");
+    assert_eq!(event(&board.next().unwrap()), "snapshot");
+    install(&d.bin);
+    // Until it retires, a ping says it runs old code.
+    let start = Instant::now();
+    let status = loop {
+        if let Some(s) = d.child.try_wait().unwrap() {
+            break s;
+        }
+        if let Ok(mut s) = UnixStream::connect(d.sock()) {
+            let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
+            let _ = writeln!(s, r#"{{"cmd":"ping"}}"#);
+            let mut out = String::new();
+            if BufReader::new(s).read_line(&mut out).is_ok_and(|n| n > 0) {
+                let r: Value = serde_json::from_str(&out).unwrap();
+                assert_eq!(r["stale"], true, "{out}");
+            }
+        }
+        // The sampler ticks every 5 seconds while the drawer is closed.
+        assert!(start.elapsed() < Duration::from_secs(10), "never retired");
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    assert!(status.success());
+    assert_eq!(event(&next_action(&mut board)), "quit");
 }
 
 #[test]

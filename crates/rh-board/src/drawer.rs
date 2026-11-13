@@ -818,6 +818,9 @@ impl Drawer {
                 }
             }
             Msg::Event(Event::Hide) => self.hide(),
+            // The daemon is restarting or was upgraded; it starts the new
+            // drawer the next time one is asked for.
+            Msg::Event(Event::Quit) => std::process::exit(0),
             Msg::Restyle => {
                 crate::linux::apply_styles();
                 let (cfg, _) = Config::load();
