@@ -2,9 +2,9 @@
 """Writes docs/assets/hero.svg: the README's animated hero.
 
 A 14 second loop under the floating Platform waybar, on the same desktop as
-the siblings' heroes. The cursor clicks Roundhouse's green lamp and the
-drawer springs out of it: Switchyard's build on one line, the tiles arrive
-and their sparklines draw, and the network tile names the busiest apps. A
+the other apps' heroes. The cursor clicks Roundhouse's green lamp and the
+drawer springs out of it: the tiles arrive and their sparklines draw, and
+the network tile names the busiest apps. A
 scroll brings up the fans, the audio card and memory by app. The Network tab
 shows the way out hop by hop with the public IP hidden, the link, and every
 app talking out; npm finishes and stays a moment as a dimmed shadow. The
@@ -38,7 +38,7 @@ FROST, GREEN, YELLOW, RED, PURPLE = "#88c0d0", "#a3be8c", "#ebcb8b", "#bf616a", 
 # foreground, the border is the pills' border, the accent is frost.
 PANEL, PANEL_LINE = "#282a2e", "rgba(76,86,106,.55)"
 TILE, TILE_LINE, WELL = "#303236", "#3b3d40", "#1a1b1e"
-FG, DIM, IDLE = "#c5c8c6", "#7e8182", "#555b64"
+FG, DIM = "#c5c8c6", "#7e8182"
 ACCENT, CALM, WARN, ACT = FROST, GREEN, YELLOW, RED
 FONT = "JetBrains Mono, DejaVu Sans Mono, Menlo, Consolas, monospace"
 
@@ -127,9 +127,9 @@ P = 14  # panel padding
 IW = DRAWER_W - 2 * P
 VIEW_Y0, VIEW_Y1 = 98, DRAWER_H - 38  # the scroller, between the tabs and the foot
 
-TABS = [("machine", "Machine"), ("storage", "Storage"), ("network", "Network"), ("ports", "Ports"), ("switchyard", "Switchyard")]
+TABS = [("machine", "Machine"), ("storage", "Storage"), ("network", "Network"), ("ports", "Ports")]
 TAB_Y, TAB_H = 58, 30
-TAB_W = (IW - 6 - 2 * 4) / 5  # homogeneous buttons, 3 px padding, 2 px spacing
+TAB_W = (IW - 6 - 2 * (len(TABS) - 1)) / len(TABS)  # homogeneous buttons, 3 px padding, 2 px spacing
 
 
 def tab_x(i):
@@ -138,20 +138,16 @@ def tab_x(i):
 
 # Where a story can click, in drawer coordinates.
 DRAWER_SPOTS = {tid: (tab_x(i) + TAB_W / 2, TAB_Y + TAB_H / 2) for i, (tid, _) in enumerate(TABS)}
-DRAWER_SPOTS["yard-line"] = (P + IW / 2, VIEW_Y0 + 15)  # calm Machine page: opens the board too
 DRAWER_SPOTS["show-ip"] = (P + IW / 2, VIEW_Y0 + 24 + 5 * 23 + 4 + 14)  # Network page
 DRAWER_SPOTS["machine-page"] = (P + IW / 2, 300)  # somewhere to scroll
 
-# Switchyard's phase colors the dot on its link (.yard-dot).
-YARD_DOT = {"idle": IDLE, "ok": CALM, "queued": ACCENT, "waiting": ACCENT, "building": ACCENT, "running": ACCENT, "failed": ACT}
 LEVEL_COLOR = {"calm": CALM, "heads-up": WARN, "act": ACT}
 
-# What the Machine page shows at each lamp level: calm while Switchyard
-# builds storefront, or red with memory stalling and android held.
+# What the Machine page shows at each lamp level: calm while storefront
+# builds, or red with memory stalling under it.
 MACHINE = {
     "calm": dict(
         chip="calm", reasons=[],
-        yard="Switchyard is building storefront · 1 queued",
         cpu=("CPU · RYZEN 7 9800X3D", "64 / 95°C", "calm", "38", "% · 5.1 GHz", (40, 38, 18, 0.14)),
         gpu=("GPU · RTX 3080", "41 / 95°C", "calm", "8", "% · 2.1 G / 10 G", (40, 9, 9, 0.14)),
         mem=("MEMORY", "SWAP 0 B", "", "21G", "/ 60 G", (40, 35, 1.5, 0.3)),
@@ -162,7 +158,6 @@ MACHINE = {
     ),
     "act": dict(
         chip="needs you", reasons=["everything is stalling on memory (22% of the last 10 s)"],
-        yard="Switchyard is holding android: Roundhouse says everything is stalling on memory",
         cpu=("CPU · RYZEN 7 9800X3D", "71 / 95°C", "calm", "64", "% · 5.2 GHz", (40, 62, 18, 0.14)),
         gpu=("GPU · RTX 3080", "41 / 95°C", "calm", "8", "% · 2.1 G / 10 G", (40, 9, 9, 0.14)),
         mem=("MEMORY", "SWAP 2.4 G", "", "58G", "/ 60 G", (40, 94, 1.5, 0.3)),
@@ -283,12 +278,12 @@ def card(add, x, y, w, title, aside, items, fx=None, meter_role=None, below=None
 
 
 def line_button(add, x, y, w, s, h=30):
-    """.yard-line: a full-width button in a tile."""
+    """.line-button: a full-width button in a tile."""
     box(add, x, y, w, h)
     add(t(x + 10, y + h / 2 + 4.5, fit(s, 12, w - 20), 12, FG))
 
 
-def drawer_head(add, level="calm", yard="building"):
+def drawer_head(add, level="calm"):
     """The header (lamp, host, uptime, chip) and the tab row with every tab
     inactive."""
     color = LEVEL_COLOR[level]
@@ -300,27 +295,18 @@ def drawer_head(add, level="calm", yard="building"):
     add(f'<rect x="{DRAWER_W - P - cw:.1f}" y="19" width="{cw:.1f}" height="20" rx="10" fill="{color}" fill-opacity=".14"/>')
     add(t(DRAWER_W - P - cw / 2, 33, chip, 11, color, 700, "middle"))
     add(f'<rect x="{P}" y="{TAB_Y}" width="{IW}" height="{TAB_H}" rx="9" fill="{TILE}"/>')
-    for i, (tid, name) in enumerate(TABS):
-        cx = tab_x(i) + TAB_W / 2
-        if tid == "switchyard":
-            # A link to the board, not a page: dot, name, arrow.
-            nw = 64
-            x0 = cx - (5 + 4 + nw + 4 + 7) / 2
-            add(f'<circle cx="{x0 + 2.5:.1f}" cy="{TAB_Y + 14.5}" r="2.5" fill="{YARD_DOT[yard]}"/>')
-            add(t(x0 + 9, TAB_Y + 19.5, name, 11.5, DIM, attrs=f'textLength="{nw}" lengthAdjust="spacingAndGlyphs"'))
-            add(t(x0 + 9 + nw + 4, TAB_Y + 19.5, "↗", 11.5, DIM))
-        else:
-            add(t(cx, TAB_Y + 19.5, name, 12, DIM, 700, "middle"))
+    for i, (_, name) in enumerate(TABS):
+        add(t(tab_x(i) + TAB_W / 2, TAB_Y + 19.5, name, 12, DIM, 700, "middle"))
 
 
 def drawer_foot(add, h=DRAWER_H):
-    add(t(P, h - 17, "1-5 tabs · Esc close · Arch Linux", 10.5, DIM))
+    add(t(P, h - 17, f"1-{len(TABS)} tabs · Esc close · Arch Linux", 10.5, DIM))
 
 
-def drawer_frame(add, level="calm", yard="building", h=DRAWER_H):
+def drawer_frame(add, level="calm", h=DRAWER_H):
     """The panel at height h, its header and tab row, and the foot."""
     add(f'<rect width="{DRAWER_W}" height="{h}" rx="16" fill="{PANEL}" fill-opacity=".97" stroke="{PANEL_LINE}" filter="url(#shadow)"/>')
-    drawer_head(add, level, yard)
+    drawer_head(add, level)
     drawer_foot(add, h)
 
 
@@ -335,14 +321,14 @@ def page_clip(add, clip):
     add(f'<clipPath id="{clip}"><rect x="{P - 2}" y="{VIEW_Y0}" width="{IW + 4}" height="{VIEW_Y1 - VIEW_Y0}"/></clipPath>')
 
 
-MACHINE_SCROLL = 254  # how far the Machine page scrolls to its end
+MACHINE_SCROLL = 216  # how far the Machine page scrolls to its end
 
 
 def page_machine(add, level="calm", fx=None, clip="rh-machine"):
-    """Machine: the verdict when the lamp is lit, Switchyard's line, CPU,
-    GPU, memory and pressure tiles, the network tile with its busiest apps,
-    fans, audio, and memory by app. Taller than the scroller: the rest is
-    MACHINE_SCROLL px further down."""
+    """Machine: the verdict when the lamp is lit, CPU, GPU, memory and
+    pressure tiles, the network tile with its busiest apps, fans, audio, and
+    memory by app. Taller than the scroller: the rest is MACHINE_SCROLL px
+    further down."""
     d = MACHINE[level]
     page_clip(add, clip)
     add(f'<g clip-path="url(#{clip})"><g{hook(fx, "scroll")}>')
@@ -356,10 +342,6 @@ def page_machine(add, level="calm", fx=None, clip="rh-machine"):
             add(t(P + 10, y + 21 + 20 * k, fit(r, 12, IW - 20), 12, FG))
         add("</g>")
         y, n = y + h + 8, n + 1
-    add(f'<g{hook(fx, "rise", n)}>')
-    line_button(add, P, y, IW, d["yard"])
-    add("</g>")
-    y, n = y + 38, n + 1
     tw = (IW - 8) / 2
     for k, key in enumerate(["cpu", "gpu", "mem", "psi"]):
         add(f'<g{hook(fx, "rise", n + k)}>')
@@ -492,14 +474,14 @@ def drawer_height(tab, level="calm"):
     return min(DRAWER_H, round(end) + DRAWER_H - VIEW_Y1)
 
 
-def drawer(add, tab="machine", level="calm", yard="building", closed=False, fx=None, clip="rh"):
+def drawer(add, tab="machine", level="calm", closed=False, fx=None, clip="rh"):
     """The whole drawer as a still, drawer_height(tab, level) tall: the
     frame, the active tab and its page. tab: machine, storage or network.
     level: calm, heads-up or act (the lamp, the chip, the verdict and the
-    Machine page's numbers). yard: Switchyard's phase, for the dot on its
-    link. closed: on the Network tab, npm has finished and shows as a
-    shadow. The drawer is anchored at its bottom, 8 px above the bar."""
-    drawer_frame(add, level, yard, drawer_height(tab, level))
+    Machine page's numbers). closed: on the Network tab, npm has finished
+    and shows as a shadow. The drawer is anchored at its bottom, 8 px above
+    the bar."""
+    drawer_frame(add, level, drawer_height(tab, level))
     drawer_tab(add, tab)
     if tab == "machine":
         page_machine(add, level, fx, f"{clip}-machine")
@@ -757,7 +739,7 @@ drawer_foot(add)
 add(f'<clipPath id="view"><rect width="{DRAWER_W}" height="{VIEW_Y1}"/></clipPath>')
 add(f'<clipPath id="sides"><rect x="{P - 2}" width="{IW + 4}" height="{DRAWER_H}"/></clipPath>')
 add(f'<g clip-path="url(#view)"><g {slide}>')
-drawer_head(add, "calm", "building")
+drawer_head(add, "calm")
 
 # Tabs light as they are picked (a 200 ms background transition, not a slide).
 for tab, spans, on in [
@@ -873,12 +855,10 @@ add("</g></svg>")
 
 ALT = (
     "A floating waybar of frosted pills: workspaces, the T3 Code window title, a song playing, five lamps with "
-    "Roundhouse's green dot first and Switchyard's amber puzzle piece beside it, volume, the desk pill and the "
-    "clock. A click on the green dot springs the Roundhouse drawer out of it: FROSTYARCH, calm, tabs for Machine, "
-    "Storage, Network and Ports, and a Switchyard link dotted with what it is doing. The Machine tab says "
-    "Switchyard is building storefront, then CPU, GPU, memory and pressure tiles with temperatures against their "
-    "limits, and the network tile names the busiest apps. A scroll brings up the fans, the audio card and memory "
-    "by app. The Network tab shows the way out hop by hop with the public IP hidden, the link, and every app "
+    "Roundhouse's green dot first, volume, the desk pill and the clock. A click on the green dot springs the "
+    "Roundhouse drawer out of it: FROSTYARCH, calm, and tabs for Machine, Storage, Network and Ports. The Machine "
+    "tab shows CPU, GPU, memory and pressure tiles with temperatures against their limits, and the network tile "
+    "names the busiest apps. A scroll brings up the fans, the audio card and memory by app. The Network tab shows the way out hop by hop with the public IP hidden, the link, and every app "
     "talking out; npm finishes and stays a moment as a dimmed shadow marked closed. The Storage tab fills a meter "
     "for each disk and the network share, and a click outside closes the drawer."
 )
