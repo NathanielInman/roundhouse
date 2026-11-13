@@ -66,24 +66,20 @@ pub fn runtime_dir() -> PathBuf {
     if let Some(d) = env_dir("ROUNDHOUSE_RUNTIME_DIR") {
         return d;
     }
-    sibling_runtime("roundhouse")
-}
-
-/// `$XDG_RUNTIME_DIR/<name>`, or a per-user directory under `$TMPDIR`.
-fn sibling_runtime(name: &str) -> PathBuf {
+    // `$XDG_RUNTIME_DIR/roundhouse`, or a per-user directory under `$TMPDIR`.
     #[cfg(unix)]
     {
         if let Some(d) = env_dir("XDG_RUNTIME_DIR") {
-            return d.join(name);
+            return d.join("roundhouse");
         }
         let base = env_dir("TMPDIR").unwrap_or_else(|| PathBuf::from("/tmp"));
-        base.join(format!("{name}-{}", unsafe { libc::getuid() }))
+        base.join(format!("roundhouse-{}", unsafe { libc::getuid() }))
     }
     #[cfg(not(unix))]
     {
         env_dir("LOCALAPPDATA")
             .unwrap_or_else(|| home().join("AppData/Local"))
-            .join(name)
+            .join("roundhouse")
             .join("run")
     }
 }
@@ -108,14 +104,6 @@ pub fn session_file() -> PathBuf {
 
 pub fn board_log() -> PathBuf {
     state_dir().join("board.log")
-}
-
-/// Where Switchyard's daemon listens, following the same rules Switchyard
-/// does, including its `SWITCHYARD_RUNTIME_DIR` override.
-pub fn switchyard_socket() -> PathBuf {
-    env_dir("SWITCHYARD_RUNTIME_DIR")
-        .unwrap_or_else(|| sibling_runtime("switchyard"))
-        .join("yard.sock")
 }
 
 /// Waybar's config directory.

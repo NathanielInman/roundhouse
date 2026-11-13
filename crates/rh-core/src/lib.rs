@@ -1,6 +1,6 @@
 //! Everything Roundhouse knows that is not drawing: where files live, the
-//! config, the collectors, the lamp rules, the socket protocol, the waybar
-//! reader and the Switchyard sibling client.
+//! config, the collectors, the lamp rules, the socket protocol and the
+//! waybar reader.
 
 pub mod collect;
 pub mod config;
@@ -10,7 +10,6 @@ pub mod model;
 pub mod paths;
 pub mod protocol;
 pub mod remote;
-pub mod sibling;
 pub mod transport;
 pub mod waybar;
 

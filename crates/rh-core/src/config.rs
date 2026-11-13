@@ -13,7 +13,6 @@ pub struct Config {
     pub storage: StorageConfig,
     pub lamp: LampConfig,
     pub network: NetworkConfig,
-    pub siblings: SiblingsConfig,
     pub session: SessionConfig,
     pub remote: RemoteConfig,
 }
@@ -105,8 +104,7 @@ pub struct DrawerConfig {
     pub max_height: f64,
     /// Gap between the bar and the panel.
     pub gap: f64,
-    /// Tabs in order. Unknown names are ignored; a sibling's tab only shows
-    /// while that sibling is running.
+    /// Tabs in order. Unknown names are ignored.
     pub tabs: Vec<String>,
 }
 
@@ -121,7 +119,6 @@ impl Default for DrawerConfig {
                 "storage".into(),
                 "network".into(),
                 "ports".into(),
-                "switchyard".into(),
             ],
         }
     }
@@ -292,19 +289,6 @@ pub struct SessionConfig {
     /// Only these cards start one (names as in `rh status`, such as
     /// "Yeti X"). Empty means any card, a webcam's microphone included.
     pub cards: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default, deny_unknown_fields)]
-pub struct SiblingsConfig {
-    /// Look for a running Switchyard and show its main line.
-    pub switchyard: bool,
-}
-
-impl Default for SiblingsConfig {
-    fn default() -> Self {
-        SiblingsConfig { switchyard: true }
-    }
 }
 
 impl Config {

@@ -21,9 +21,6 @@ pub struct Entry {
     pub t: f64,
     pub level: Level,
     pub reasons: Vec<EntryReason>,
-    /// What `lamp.hold` said, if anything.
-    #[serde(default)]
-    pub hold: Option<String>,
     #[serde(default)]
     pub session: bool,
 }
@@ -44,7 +41,7 @@ fn rotated(path: &Path) -> PathBuf {
 }
 
 /// Writes a line when the lamp's state changes: its level, which rules are
-/// lit at which level, the hold or the session. A reason's numbers changing
+/// lit at which level, or the session. A reason's numbers changing
 /// ("87°C" to "88°C") is not a change.
 #[derive(Default)]
 pub struct Recorder {
@@ -67,7 +64,7 @@ impl Recorder {
 
     pub fn record(&mut self, s: &Snapshot) {
         let sig = format!(
-            "{}|{}|{:?}|{}",
+            "{}|{}|{}",
             s.lamp.level.as_str(),
             s.lamp
                 .reasons
@@ -75,7 +72,6 @@ impl Recorder {
                 .map(|r| format!("{}={}", r.key, r.level.as_str()))
                 .collect::<Vec<_>>()
                 .join(","),
-            s.lamp.hold,
             s.session.is_some()
         );
         if self.last.as_deref() == Some(sig.as_str()) {
@@ -101,7 +97,6 @@ impl Recorder {
                     text: r.text.clone(),
                 })
                 .collect(),
-            hold: s.lamp.hold.clone(),
             session: s.session.is_some(),
         };
         let path = self.path.clone().unwrap_or_else(file);

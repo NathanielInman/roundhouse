@@ -1,7 +1,7 @@
 //! The daemon's local socket: a Unix socket only the user can open.
 //!
-//! macOS works the same way. Windows support (a token-guarded localhost port,
-//! as Switchyard does) lands with the tray app.
+//! macOS works the same way. Windows support (a token-guarded localhost port)
+//! lands with the tray app.
 
 #[cfg(unix)]
 use anyhow::Context;
@@ -85,7 +85,7 @@ impl Listener {
 
     /// Removes the socket when the daemon is told to stop (SIGTERM from
     /// systemd, SIGINT from a terminal, SIGHUP when its session ends), so no
-    /// stale `rh.sock` is left for siblings to try.
+    /// stale `rh.sock` is left for clients to try.
     pub fn cleanup_on_signal(&self) {
         let path = crate::paths::socket_path();
         let Ok(c) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else {

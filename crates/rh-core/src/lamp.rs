@@ -393,33 +393,7 @@ fn rules(s: &Snapshot, t: &LampConfig, prev: &dyn Fn(&str) -> Level) -> Vec<Raw>
 fn lamp_of(mut reasons: Vec<Reason>) -> Lamp {
     reasons.sort_by_key(|x| std::cmp::Reverse(x.level));
     let level = reasons.first().map(|x| x.level).unwrap_or(Level::Calm);
-    Lamp {
-        level,
-        reasons,
-        hold: None,
-    }
-}
-
-/// What `lamp.hold` says during a recording session.
-pub const SESSION_HOLD: &str = "a recording session is on";
-
-/// Rules that more heavy work would make worse: a filling disk, memory.
-/// Heat is not one (the build is what heats the CPU, and a part at its limit
-/// protects itself), nor is the network.
-fn holds_builds(key: &str) -> bool {
-    ["fs:", "mem."].iter().any(|p| key.starts_with(p))
-}
-
-/// Why heavy work should wait: a recording session, else the first act
-/// reason that more work would make worse.
-pub fn hold(lamp: &Lamp, session: Option<&crate::model::Session>) -> Option<String> {
-    if session.is_some() {
-        return Some(SESSION_HOLD.into());
-    }
-    lamp.reasons
-        .iter()
-        .find(|r| r.level == Level::Act && holds_builds(&r.key))
-        .map(|r| r.text.clone())
+    Lamp { level, reasons }
 }
 
 /// Works out the lamp from one snapshot, with no memory of earlier ones.
@@ -739,30 +713,6 @@ mod tests {
     }
 
     #[test]
-    fn holds_for_sessions_and_disks_but_not_heat() {
-        let mut s = Snapshot::default();
-        s.machine.cpu.throttling = true;
-        let lamp = evaluate(&s, &LampConfig::default());
-        assert_eq!(lamp.level, Level::Act);
-        assert_eq!(hold(&lamp, None), None);
-        let session = crate::model::Session::default();
-        assert_eq!(hold(&lamp, Some(&session)).as_deref(), Some(SESSION_HOLD));
-        s.disks.push(Disk {
-            name: "nvme0n1".into(),
-            filesystems: vec![fs("/data", 96, 4)],
-            ..Default::default()
-        });
-        let lamp = evaluate(&s, &LampConfig::default());
-        assert_eq!(hold(&lamp, None).as_deref(), Some("/data is 96% full"));
-    }
-
-    #[test]
-    fn hold_is_always_sent() {
-        let json = serde_json::to_string(&Lamp::default()).unwrap();
-        assert_eq!(json, r#"{"level":"calm","reasons":[],"hold":null}"#);
-    }
-
-    #[test]
     fn dropouts_count_only_while_recording() {
         let mut s = Snapshot::default();
         s.audio.graph = Some(crate::model::AudioGraph {
@@ -787,7 +737,6 @@ mod tests {
         s.session = Some(crate::model::Session::default());
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.reasons[0].text, "fans are loud: nct6798 fan2 2100 RPM");
-        assert_eq!(hold(&lamp, None), None);
     }
 
     #[test]
@@ -859,9 +808,10 @@ mod tests {
             .all(|r| r.key != "net.route"));
     }
 
-    /// Every field and type in the checked-in lamp is still sent: Switchyard
-    /// reads this shape, so it may only grow. Add to the fixture when a field
-    /// is added; never remove one.
+    /// Every field and type in the checked-in lamp is still sent: other
+    /// machines' daemons (`remote.hosts`) and scripts reading `rh status
+    /// --json` read this shape, so it may only grow. Add to the fixture when a
+    /// field is added; never remove one.
     #[test]
     fn the_lamp_contract_only_grows() {
         fn covers(fixture: &serde_json::Value, out: &serde_json::Value, path: &str) {
@@ -894,14 +844,13 @@ mod tests {
             filesystems: vec![fs("/data", 96, 4)],
             ..Default::default()
         });
-        let mut lamp = evaluate(&s, &LampConfig::default());
-        lamp.hold = hold(&lamp, None);
+        let lamp = evaluate(&s, &LampConfig::default());
         let out = serde_json::to_value(&lamp).unwrap();
         covers(&fixture, &out, "lamp");
     }
 
     #[test]
-    fn other_machines_light_this_lamp_but_never_hold_builds() {
+    fn other_machines_light_this_lamp() {
         let mut s = Snapshot::default();
         s.remotes.push(crate::model::RemoteHost {
             name: "rime".into(),
@@ -914,7 +863,6 @@ mod tests {
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.level, Level::Act);
         assert_eq!(lamp.reasons[0].text, "rime: /mnt/tank is 96% full");
-        assert_eq!(hold(&lamp, None), None);
         s.remotes[0].online = false;
         let lamp = evaluate(&s, &LampConfig::default());
         assert_eq!(lamp.reasons[0].text, "rime is not answering");

@@ -9,9 +9,8 @@
 //! [`place`] turns the answer into a panel rectangle and a scale origin, so
 //! the open animation grows out of the icon.
 //!
-//! This crate started as Switchyard's anchoring code. The [`Anchor`] wire
-//! format is the same as Switchyard's, so one sibling can hand an anchor to the
-//! other and its panel opens from the same icon.
+//! This crate started as Switchyard's anchoring code and keeps its [`Anchor`]
+//! wire format.
 
 pub mod hypr;
 pub mod niri;
@@ -137,7 +136,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wire_format_matches_switchyard() {
+    fn reads_the_anchor_wire_format() {
         let json = r#"{"monitor":"DP-2","edge":"bottom","x":2310,"y":1428,"width":2560,"height":1440,"reserved":[0,0,0,24],"center":false}"#;
         let a: Anchor = serde_json::from_str(json).unwrap();
         assert_eq!(a.edge, Edge::Bottom);

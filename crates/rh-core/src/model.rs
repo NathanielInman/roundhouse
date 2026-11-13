@@ -1,5 +1,5 @@
 //! The snapshot the daemon publishes. Clients (drawer, bar module, CLI,
-//! siblings) read it; only the daemon writes it.
+//! scripts) read it; only the daemon writes it.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +11,6 @@ pub struct Snapshot {
     /// Memory by app, largest first. Filled while the drawer is open.
     pub apps: Vec<AppUsage>,
     pub lamp: Lamp,
-    pub siblings: Siblings,
     /// A config problem to show in the drawer.
     #[serde(default)]
     pub config_error: Option<String>,
@@ -407,13 +406,6 @@ pub struct Reason {
 pub struct Lamp {
     pub level: Level,
     pub reasons: Vec<Reason>,
-    /// Why heavy work should wait right now, or `null`. Switchyard holds its
-    /// next heavy build while this is set. It is set by a recording session
-    /// or by an act reason that more work would make worse (disk, memory);
-    /// a hot part is not one, since the build is what heats it. Always sent,
-    /// so a sibling can tell a calm answer from an older Roundhouse.
-    #[serde(default)]
-    pub hold: Option<String>,
 }
 
 /// Another machine's lamp, read from its daemon.
@@ -605,8 +597,8 @@ impl AudioGraph {
     }
 }
 
-/// A recording session: heavy work waits until it ends, without turning the
-/// lamp red.
+/// A recording session: while it is on, audio dropouts and loud fans light
+/// the lamp, and the session itself does not turn it red.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Session {
     /// Unix seconds when it started.
@@ -615,67 +607,4 @@ pub struct Session {
     /// rather than with `rh session on`.
     #[serde(default)]
     pub auto: bool,
-}
-
-/// What the siblings that are running right now report. A missing sibling is
-/// `None`, never an error.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct Siblings {
-    pub switchyard: Option<SwitchyardView>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct SwitchyardView {
-    /// Switchyard's aggregate phase: idle, queued, building, running, ok,
-    /// failed.
-    pub phase: String,
-    pub tasks: usize,
-    /// The heavy build on the main line.
-    pub current: Option<String>,
-    pub queue: Vec<String>,
-    pub waiting_memory: bool,
-    pub building: Vec<String>,
-    pub running: Vec<String>,
-    pub failed: Vec<String>,
-    /// Task id to label.
-    pub labels: Vec<(String, String)>,
-    /// Why the next heavy build is waiting, in Switchyard's words ("held:
-    /// Roundhouse says ...", "waiting for 16 G free ..."), while it is.
-    #[serde(default)]
-    pub waiting: Option<String>,
-}
-
-impl SwitchyardView {
-    pub fn label<'a>(&'a self, id: &'a str) -> &'a str {
-        self.labels
-            .iter()
-            .find(|(i, _)| i == id)
-            .map(|(_, l)| l.as_str())
-            .unwrap_or(id)
-    }
-
-    /// One line for the Machine tab while Switchyard is busy with heavy
-    /// work, since a build explains a busy machine. `None` while it is not.
-    pub fn status_line(&self) -> Option<String> {
-        if let Some(cur) = &self.current {
-            let rest = self.queue.iter().filter(|q| *q != cur).count();
-            let mut s = format!("Switchyard is building {}", self.label(cur));
-            if rest > 0 {
-                s.push_str(&format!(" · {rest} queued"));
-            }
-            return Some(s);
-        }
-        if let (Some(head), Some(why)) = (self.queue.first(), &self.waiting) {
-            let name = self.label(head);
-            return Some(match why.strip_prefix("held: ") {
-                Some(r) => format!("Switchyard is holding {name}: {r}"),
-                None => format!("Switchyard: {name} is {why}"),
-            });
-        }
-        if !self.building.is_empty() {
-            let names: Vec<&str> = self.building.iter().map(|b| self.label(b)).collect();
-            return Some(format!("Switchyard is building {}", names.join(", ")));
-        }
-        None
-    }
 }

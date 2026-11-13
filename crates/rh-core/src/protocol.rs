@@ -1,8 +1,6 @@
-//! The daemon socket: newline-delimited JSON, one request per line.
-//!
-//! The shapes follow Switchyard's (`{"cmd":"toggle","anchor":{...}}`,
-//! `{"event":"show",...}`), so the two are easy to read side by side and a
-//! sibling can talk to either without a shared crate.
+//! The daemon socket: newline-delimited JSON, one request per line
+//! (`{"cmd":"toggle","anchor":{...}}`), and events to subscribers
+//! (`{"event":"show",...}`).
 
 use crate::model::Snapshot;
 use crate::Anchor;
