@@ -57,11 +57,14 @@ flowchart LR
 | User stylesheet | `~/.config/roundhouse/style.css` | `ROUNDHOUSE_CONFIG_DIR` |
 | Logs | `~/.local/state/roundhouse/` | `ROUNDHOUSE_STATE_DIR` |
 | Socket | `$XDG_RUNTIME_DIR/roundhouse/rh.sock` | `ROUNDHOUSE_RUNTIME_DIR` |
+| Daemon lock | `$XDG_RUNTIME_DIR/roundhouse/daemon.lock` | `ROUNDHOUSE_RUNTIME_DIR` |
 | Lamp history | `~/.local/state/roundhouse/history.jsonl` | `ROUNDHOUSE_STATE_DIR` |
 | Recording session | `~/.local/state/roundhouse/session.json` | `ROUNDHOUSE_STATE_DIR` |
 | Drawer binary | `rh-board` next to `rh`, else on `PATH` | `ROUNDHOUSE_BOARD` |
 
-The runtime directory is mode 0700 and the socket 0600.
+The runtime directory is mode 0700 and the socket 0600. The daemon holds
+`daemon.lock` (flock) while it runs, so two started at once (both bar modules
+after an upgrade) cannot both bind the socket: the second exits.
 
 ## Sampling
 

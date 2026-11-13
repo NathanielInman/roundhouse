@@ -16,6 +16,19 @@ struct Daemon {
     child: Child,
 }
 
+/// `rh` pointed at a throwaway directory.
+fn rh(root: &Path) -> Command {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_rh"));
+    c.env("ROUNDHOUSE_RUNTIME_DIR", root.join("run"))
+        .env("ROUNDHOUSE_STATE_DIR", root.join("state"))
+        .env("ROUNDHOUSE_CONFIG_DIR", root.join("config"))
+        // Never start a real drawer.
+        .env("ROUNDHOUSE_BOARD", "/bin/true")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    c
+}
+
 impl Daemon {
     fn start(name: &str) -> Daemon {
         Daemon::with_config(name, "")
@@ -28,17 +41,7 @@ impl Daemon {
             std::fs::create_dir_all(root.join(d)).unwrap();
         }
         std::fs::write(root.join("config/config.toml"), config).unwrap();
-        let child = Command::new(env!("CARGO_BIN_EXE_rh"))
-            .arg("daemon")
-            .env("ROUNDHOUSE_RUNTIME_DIR", root.join("run"))
-            .env("ROUNDHOUSE_STATE_DIR", root.join("state"))
-            .env("ROUNDHOUSE_CONFIG_DIR", root.join("config"))
-            // Never start a real drawer.
-            .env("ROUNDHOUSE_BOARD", "/bin/true")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap();
+        let child = rh(&root).arg("daemon").spawn().unwrap();
         let d = Daemon { root, child };
         let start = Instant::now();
         while !d.sock().exists() {
@@ -167,6 +170,15 @@ fn stopping_removes_the_socket() {
     unsafe { libc::kill(pid, libc::SIGTERM) };
     let _ = d.child.wait();
     assert!(!Path::new(&d.sock()).exists());
+}
+
+#[test]
+fn a_second_daemon_leaves_the_first_alone() {
+    let d = Daemon::start("twice");
+    let status = rh(&d.root).arg("daemon").status().unwrap();
+    assert!(!status.success());
+    assert!(d.sock().exists());
+    assert_eq!(d.request(r#"{"cmd":"ping"}"#)["ok"], true);
 }
 
 #[test]

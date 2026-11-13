@@ -88,6 +88,12 @@ pub fn socket_path() -> PathBuf {
     runtime_dir().join("rh.sock")
 }
 
+/// Held (flock) by the running daemon, so two daemons started at once (two
+/// bar modules after an upgrade) cannot both bind the socket.
+pub fn lock_path() -> PathBuf {
+    runtime_dir().join("daemon.lock")
+}
+
 pub fn config_file() -> PathBuf {
     config_dir().join("config.toml")
 }

@@ -52,17 +52,30 @@ pub fn daemon_alive() -> bool {
 #[cfg(unix)]
 pub struct Listener {
     inner: std::os::unix::net::UnixListener,
+    /// Held for the daemon's lifetime; the kernel drops the lock if it dies.
+    _lock: std::fs::File,
 }
 
 #[cfg(unix)]
 impl Listener {
     pub fn bind() -> Result<Listener> {
+        use std::os::fd::AsRawFd;
         use std::os::unix::fs::PermissionsExt;
         let dir = crate::paths::runtime_dir();
         std::fs::create_dir_all(&dir)?;
         let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
         let path = crate::paths::socket_path();
-        if daemon_alive() {
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(crate::paths::lock_path())?;
+        // Two daemons started at once (both bar modules) must not both bind:
+        // the second would unlink the first one's socket. A daemon from
+        // before the lock does not hold it, so a live socket still counts.
+        // SAFETY: flock on a file descriptor we own.
+        let locked = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
+        if !locked || daemon_alive() {
             return Err(anyhow!(
                 "a Roundhouse daemon is already running ({})",
                 path.display()
@@ -72,7 +85,7 @@ impl Listener {
         let inner = std::os::unix::net::UnixListener::bind(&path)
             .with_context(|| format!("binding {}", path.display()))?;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-        Ok(Listener { inner })
+        Ok(Listener { inner, _lock: lock })
     }
 
     pub fn accept(&self) -> std::io::Result<Stream> {
