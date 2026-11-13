@@ -7,8 +7,8 @@
 //!
 //! Nothing writes to a socket while holding the state lock: each subscriber
 //! has its own writer thread fed by a small queue, so a frozen drawer can
-//! never stall a snapshot reply. Switchyard is polled on its own thread for
-//! the same reason.
+//! never stall a snapshot reply. Other machines are asked on their own thread
+//! for the same reason.
 
 use rh_core::collect::Collector;
 use rh_core::config::Config;
@@ -22,9 +22,6 @@ use std::time::{Duration, Instant, SystemTime};
 
 const OPEN_EVERY: Duration = Duration::from_secs(1);
 const CLOSED_EVERY: Duration = Duration::from_secs(5);
-/// How often to look for siblings.
-const SIBLING_OPEN: Duration = Duration::from_secs(2);
-const SIBLING_CLOSED: Duration = Duration::from_secs(15);
 
 struct State {
     cfg: Config,
@@ -41,8 +38,6 @@ struct State {
     wake: bool,
     /// Other machines' lamps, kept by their own thread.
     remotes: Vec<rh_core::model::RemoteHost>,
-    /// The latest answer from Switchyard, kept by its own thread.
-    switchyard: Option<rh_core::model::SwitchyardView>,
     bar_line: String,
     /// A show the drawer has not received yet because it is still starting.
     pending: Option<Event>,
@@ -332,7 +327,6 @@ fn handle(shared: Shared, stream: Stream) {
                 }
                 let mut snap = st.snap.clone();
                 snap.session = st.session();
-                snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, snap.session.as_ref());
                 Reply {
                     snapshot: Some(Box::new(snap)),
                     ..Reply::ok()
@@ -351,34 +345,6 @@ fn handle(shared: Shared, stream: Stream) {
         ) {
             return;
         }
-    }
-}
-
-/// Polls Switchyard every 2 s while the drawer is open and every 15 s while
-/// it is closed. A sibling that does not answer costs this thread its 300 ms
-/// deadline, never a sample.
-fn sibling_watcher(shared: Shared) {
-    let (lock, cv) = &*shared;
-    loop {
-        let (on, visible) = {
-            let st = lock.lock().unwrap();
-            (st.cfg.siblings.switchyard, st.visible)
-        };
-        let view = if on {
-            rh_core::sibling::switchyard()
-        } else {
-            None
-        };
-        let mut st = lock.lock().unwrap();
-        st.switchyard = view;
-        let every = if visible {
-            SIBLING_OPEN
-        } else {
-            SIBLING_CLOSED
-        };
-        let _ = cv
-            .wait_timeout_while(st, every, |s| s.visible == visible)
-            .unwrap();
     }
 }
 
@@ -469,7 +435,7 @@ fn sampler(shared: Shared) {
     let mut due = Instant::now();
     let mut was_visible = false;
     loop {
-        let (cfg, cfg_error, visible, switchyard, watch, remotes) = {
+        let (cfg, cfg_error, visible, watch, remotes) = {
             let mut st = lock.lock().unwrap();
             st.wake = false;
             let now_mtime = config_mtime();
@@ -483,7 +449,6 @@ fn sampler(shared: Shared) {
                 st.cfg.clone(),
                 st.cfg_error.clone(),
                 st.visible,
-                st.switchyard.clone(),
                 st.session().is_some(),
                 st.remotes.clone(),
             )
@@ -501,15 +466,9 @@ fn sampler(shared: Shared) {
             }
             st.session()
         };
-        snap.session = session.clone();
+        snap.session = session;
         snap.remotes = remotes;
-        snap.siblings.switchyard = if cfg.siblings.switchyard {
-            switchyard
-        } else {
-            None
-        };
         snap.lamp = lamp.update(&snap, &cfg.lamp);
-        snap.lamp.hold = rh_core::lamp::hold(&snap.lamp, session.as_ref());
         snap.config_error = cfg_error;
         history.record(&snap);
         let bar = serde_json::to_string(&crate::bar::line(&snap, &cfg)).unwrap_or_default();
@@ -558,7 +517,6 @@ pub fn run() -> anyhow::Result<i32> {
             bar_line: String::new(),
             pending: None,
             board_started: None,
-            switchyard: None,
             session: load_session(),
             auto: AutoSession::default(),
             remotes: vec![],
@@ -569,8 +527,6 @@ pub fn run() -> anyhow::Result<i32> {
     {
         let s = shared.clone();
         std::thread::spawn(move || sampler(s));
-        let s = shared.clone();
-        std::thread::spawn(move || sibling_watcher(s));
         let s = shared.clone();
         std::thread::spawn(move || remote_watcher(s));
         let listen = shared.0.lock().unwrap().cfg.remote.listen.clone();

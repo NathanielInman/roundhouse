@@ -33,9 +33,8 @@ impl Daemon {
             .env("ROUNDHOUSE_RUNTIME_DIR", root.join("run"))
             .env("ROUNDHOUSE_STATE_DIR", root.join("state"))
             .env("ROUNDHOUSE_CONFIG_DIR", root.join("config"))
-            // Never start a real drawer, and never find a real Switchyard.
+            // Never start a real drawer.
             .env("ROUNDHOUSE_BOARD", "/bin/true")
-            .env("SWITCHYARD_RUNTIME_DIR", root.join("no-yard"))
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -136,10 +135,10 @@ fn a_starting_drawer_gets_the_show_it_missed() {
 }
 
 #[test]
-fn sessions_hold_builds_and_are_recorded() {
+fn sessions_are_kept_and_recorded() {
     let d = Daemon::start("session");
     let r = d.request(r#"{"cmd":"session","on":true}"#);
-    assert_eq!(r["snapshot"]["lamp"]["hold"], "a recording session is on");
+    assert!(r["snapshot"]["session"]["since"].as_f64().unwrap() > 0.0);
     assert_eq!(r["snapshot"]["session"]["auto"], false);
     assert!(d.root.join("state/session.json").exists());
     // The sampler wakes for the change, so the next snapshot carries it and
@@ -156,7 +155,7 @@ fn sessions_hold_builds_and_are_recorded() {
     let history = std::fs::read_to_string(d.root.join("state/history.jsonl")).unwrap();
     assert!(history.contains(r#""session":true"#));
     let r = d.request(r#"{"cmd":"session","on":false}"#);
-    assert!(r["snapshot"]["lamp"]["hold"].is_null());
+    assert!(r["snapshot"]["session"].is_null());
     assert!(!d.root.join("state/session.json").exists());
 }
 
