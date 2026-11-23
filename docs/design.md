@@ -44,7 +44,7 @@ flowchart LR
 
 | Crate | Role |
 |---|---|
-| `bar-anchor` | Anchoring (Hyprland, sway, niri) and panel placement. No GTK. |
+| [`bar-anchor`](https://github.com/NathanielInman/bar-anchor) | Anchoring and panel placement, shared by the waybar apps and pinned by tag in the root `Cargo.toml`. |
 | `rh-core` | Collectors, the snapshot model, lamp rules, config, the socket protocol and the waybar reader. No UI. |
 | `rh` | The `rh` binary: daemon, CLI and waybar module. |
 | `rh-board` | The Linux drawer: GTK4 on `gtk4-layer-shell`, overlay layer, keyboard exclusive while open. |

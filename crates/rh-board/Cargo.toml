@@ -10,7 +10,7 @@ authors.workspace = true
 # The layer-shell drawer is Linux only; macOS and Windows get a tray app.
 [target.'cfg(target_os = "linux")'.dependencies]
 rh-core = { path = "../rh-core" }
-bar-anchor = { path = "../bar-anchor" }
+bar-anchor.workspace = true
 serde_json.workspace = true
 gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
 gtk4-layer-shell = "0.8"

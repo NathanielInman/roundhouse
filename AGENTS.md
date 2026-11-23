@@ -5,8 +5,10 @@ for whatever you change.
 
 ## Crates
 
-- `bar-anchor`: anchoring (Hyprland, sway, niri) and panel placement, no
-  GTK.
+- `bar-anchor` is no longer in this repo: it's the shared
+  [bar-anchor](https://github.com/NathanielInman/bar-anchor) crate, pinned by tag in the root `Cargo.toml`.
+  Change it there and move the tag; its `Anchor` JSON must stay
+  identical across the apps.
 - `rh-core`: collectors (`collect/`), the snapshot model, lamp rules, config,
   the socket protocol and the waybar reader. No UI.
 - `rh`: the daemon, CLI and waybar module (one binary, `rh`).

@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 rh-core = { path = "../rh-core" }
-bar-anchor = { path = "../bar-anchor" }
+bar-anchor.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 
